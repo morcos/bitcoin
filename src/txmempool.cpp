@@ -6,6 +6,8 @@
 #include "txmempool.h"
 
 #include "core.h"
+#include "main.h"
+#include "policyestimator.h"
 #include "util.h"
 
 #include <boost/circular_buffer.hpp>
@@ -13,7 +15,7 @@
 using namespace std;
 
 CTxMemPoolEntry::CTxMemPoolEntry():
-    nFee(0), nTxSize(0), nModSize(0), nTime(0), dPriority(0.0)
+    nFee(0), nTxSize(0), nModSize(0), nTime(0), dPriority(0.0), onlyChainCoins(false)
 {
     nHeight = MEMPOOL_HEIGHT;
 }
@@ -26,6 +28,7 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransaction& _tx, int64_t _nFee,
     nTxSize = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
 
     nModSize = tx.CalculateModifiedSize(nTxSize);
+    onlyChainCoins = CheckClearance();
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
@@ -40,6 +43,21 @@ CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
     double deltaPriority = ((double)(currentHeight-nHeight)*nValueIn)/nModSize;
     double dResult = dPriority + deltaPriority;
     return dResult;
+}
+
+// Check whether all of this transactions inputs are available and the tx is clear
+// to be added to a block (not dependent on other mempool transactions)
+bool CTxMemPoolEntry::CheckClearance()
+{
+    CCoinsViewCache view(*pcoinsTip, true);
+    BOOST_FOREACH(const CTxIn &txin, tx.vin)
+    {
+        if (!view.HaveCoins(txin.prevout.hash)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 //
@@ -363,7 +381,7 @@ CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
     // to wait a day or two to save a fraction of a penny in fees.
     // Confirmation times for very-low-fee transactions that take more
     // than an hour or three to confirm are highly variable.
-    minerPolicyEstimator = new CMinerPolicyEstimator(25);
+    minerPolicyEstimator = new CBlockPolicyEstimator();
 }
 
 CTxMemPool::~CTxMemPool()
@@ -471,7 +489,6 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
         if (mapTx.count(hash))
             entries.push_back(mapTx[hash]);
     }
-    minerPolicyEstimator->seenBlock(entries, nBlockHeight, minRelayFee);
     BOOST_FOREACH(const CTransaction& tx, vtx)
     {
         std::list<CTransaction> dummy;
@@ -479,8 +496,8 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
         removeConflicts(tx, conflicts);
         ClearPrioritisation(tx.GetHash());
     }
+    minerPolicyEstimator->processBlock(nBlockHeight, entries);
 }
-
 
 void CTxMemPool::clear()
 {

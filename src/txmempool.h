@@ -35,6 +35,7 @@ private:
     int64_t nTime; // Local time when entering the mempool
     double dPriority; // Priority when entering the mempool
     unsigned int nHeight; // Chain height when entering the mempool
+    bool onlyChainCoins; // Whether this tx inputs existed only within the chain
 
 public:
     CTxMemPoolEntry(const CTransaction& _tx, int64_t _nFee,
@@ -48,9 +49,11 @@ public:
     size_t GetTxSize() const { return nTxSize; }
     int64_t GetTime() const { return nTime; }
     unsigned int GetHeight() const { return nHeight; }
+    bool WasClearAtEntry() const { return onlyChainCoins; }
+    bool CheckClearance();
 };
 
-class CMinerPolicyEstimator;
+class CBlockPolicyEstimator;
 
 /*
  * CTxMemPool stores valid-according-to-the-current-best-chain
@@ -67,7 +70,7 @@ class CTxMemPool
 private:
     bool fSanityCheck; // Normally false, true if -checkmempool or -regtest
     unsigned int nTransactionsUpdated;
-    CMinerPolicyEstimator* minerPolicyEstimator;
+    CBlockPolicyEstimator* minerPolicyEstimator;
 
     CFeeRate minRelayFee; // Passed to constructor to avoid dependency on main
     uint64_t totalTxSize; // sum of all mempool tx' byte sizes
