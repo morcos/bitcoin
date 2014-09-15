@@ -298,6 +298,46 @@ def random_transaction(nodes, amount, min_fee, fee_increment, fee_variants):
 
     return (txid, signresult["hex"], fee)
 
+def small_tx_from_inputs_randfee(from_node, from_address, to_address, inputlist, amount, max_input, min_fee, fee_increment, fee_variants):
+    """
+    Create a small tx with a random fee, given a list of inputs, and from/to addresses
+    Takes inputs from the inputlist until it has sufficient funds, with ability to refresh list
+    Returns (txid, updated-input-list, hex-encoded-transaction-data, fee)
+    """
+    fee = min_fee + fee_increment*random.randint(1,fee_variants)
+    
+    inputs = []
+    total_in = Decimal("0.00000000")
+    while total_in <= (amount + fee) and len(inputlist) > 0:
+        t = inputlist.pop()
+        if t["amount"] <= max_input:
+            total_in += t["amount"]
+            inputs.append({ "txid" : t["txid"], "vout" : t["vout"], "address" : t["address"] } )
+
+    if len(inputlist) == 0 and total_in <= (amount + fee):
+            inputlist = from_node.listunspent(1)
+            random.shuffle(inputlist)
+            inputs = []
+            total_in = Decimal("0.00000000")
+            while total_in < (amount + fee) and len(inputlist) > 0:
+                t = inputlist.pop()
+                if t["amount"] < max_input :
+                    total_in += t["amount"]
+                    inputs.append({ "txid" : t["txid"], "vout" : t["vout"], "address" : t["address"] } )
+
+
+    if total_in <= amount + fee:
+        print(amount+fee,total_in)
+        raise RuntimeError("Insufficient funds: need %d, have %d"%(amount+fee, total_in))
+    outputs = {}
+    outputs[from_address] = total_in - amount - fee
+    outputs[to_address] = amount
+    rawtx = from_node.createrawtransaction(inputs, outputs)
+    signresult = from_node.signrawtransaction(rawtx)
+    txid = from_node.sendrawtransaction(signresult["hex"], True)
+   
+    return (txid, inputlist, signresult["hex"], fee)
+   
 def assert_equal(thing1, thing2):
     if thing1 != thing2:
         raise AssertionError("%s != %s"%(str(thing1),str(thing2)))
