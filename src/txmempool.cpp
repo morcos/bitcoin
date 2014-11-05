@@ -6,7 +6,6 @@
 #include "txmempool.h"
 
 #include "clientversion.h"
-#include "main.h"
 #include "policyestimator.h"
 #include "streams.h"
 #include "util.h"
@@ -16,20 +15,20 @@
 using namespace std;
 
 CTxMemPoolEntry::CTxMemPoolEntry():
-    nFee(0), nTxSize(0), nModSize(0), nTime(0), dPriority(0.0), onlyChainCoins(false)
+    nFee(0), nTxSize(0), nModSize(0), nTime(0), dPriority(0.0), hadNoDependencies(false)
 {
     nHeight = MEMPOOL_HEIGHT;
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
                                  int64_t _nTime, double _dPriority,
-                                 unsigned int _nHeight):
-    tx(_tx), nFee(_nFee), nTime(_nTime), dPriority(_dPriority), nHeight(_nHeight)
+                                 unsigned int _nHeight, bool hasNoDeps):
+    tx(_tx), nFee(_nFee), nTime(_nTime), dPriority(_dPriority), nHeight(_nHeight),
+    hadNoDependencies(hasNoDeps)
 {
     nTxSize = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
 
     nModSize = tx.CalculateModifiedSize(nTxSize);
-    onlyChainCoins = CheckClearance();
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
@@ -44,21 +43,6 @@ CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
     double deltaPriority = ((double)(currentHeight-nHeight)*nValueIn)/nModSize;
     double dResult = dPriority + deltaPriority;
     return dResult;
-}
-
-// Check whether all of this transactions inputs are available and the tx is clear
-// to be added to a block (not dependent on other mempool transactions)
-bool CTxMemPoolEntry::CheckClearance()
-{
-    CCoinsViewCache view(pcoinsTip);
-    BOOST_FOREACH(const CTxIn &txin, tx.vin)
-    {
-        if (!view.HaveCoins(txin.prevout.hash)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :

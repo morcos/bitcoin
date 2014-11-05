@@ -38,11 +38,12 @@ private:
     int64_t nTime; // Local time when entering the mempool
     double dPriority; // Priority when entering the mempool
     unsigned int nHeight; // Chain height when entering the mempool
-    bool onlyChainCoins; // Whether this tx inputs existed only within the chain
+    bool hadNoDependencies; // Not dependent on any other mempool txs when it entered the mempool
 
 public:
     CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
-                    int64_t _nTime, double _dPriority, unsigned int _nHeight);
+                    int64_t _nTime, double _dPriority, unsigned int _nHeight,
+                    bool hasNoDeps = false);
     CTxMemPoolEntry();
     CTxMemPoolEntry(const CTxMemPoolEntry& other);
 
@@ -52,8 +53,7 @@ public:
     size_t GetTxSize() const { return nTxSize; }
     int64_t GetTime() const { return nTime; }
     unsigned int GetHeight() const { return nHeight; }
-    bool WasClearAtEntry() const { return onlyChainCoins; }
-    bool CheckClearance();
+    bool WasClearAtEntry() const { return hadNoDependencies; }
 };
 
 class CBlockPolicyEstimator;

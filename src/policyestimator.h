@@ -100,6 +100,26 @@ public:
     void Read(CAutoFile& filein);
 };
 
+
+
+/** Track confirm delays up to 25 blocks, can't estimate beyond that */
+static const unsigned int MAX_BLOCK_CONFIRMS = 25;
+
+/** Decay of .998 is a half-life of 346 blocks or about 2.4 days */
+static const double DEFAULT_DECAY = .998;
+
+/** Require greater than 80% of X fee transactions to be confirmed within Y blocks for X to be big enough */
+static const double MIN_SUCCESS_PCT = .85;
+
+/** Require an avg of 1 tx in the combined fee bucket per block to have stat significance */
+static const double SUFFICIENT_FEETXS = 1;
+
+/** Require only an avg of 1 tx every 10 blocks in the combined pri block (way less pri txs) */
+static const double SUFFICIENT_PRITXS = .1;
+
+/** Approximately the AllowFree cutoff */
+static const double MIN_PRIORITY_VAL = 1e8;
+
 // We have to lump transactions into buckets based on fee or priority, but we want to be able
 // to give accurate estimates over a large range of potential fees and priorities
 // Therefore it makes sense to exponentially space the buckets
@@ -156,23 +176,5 @@ private:
     enum FeePriVal { lowVal = 0,
                      highVal = 1,
                      zeroVal = 2 };
-
-    /** Track confirm delays up to 25 blocks, can't estimate beyond that */
-    static const unsigned int MAX_BLOCK_CONFIRMS = 25;
-
-    /** Decay of .998 is a half-life of 346 blocks or about 2.4 days */
-    static const double DEFAULT_DECAY = .998;
-
-    /** Require greater than 80% of X fee transactions to be confirmed within Y blocks for X to be big enough */
-    static const double MIN_SUCCESS_PCT = .85;
-
-    /** Require an avg of 1 tx in the combined fee bucket per block to have stat significance */
-    static const double SUFFICIENT_FEETXS = 1;
-
-    /** Require only an avg of 1 tx every 10 blocks in the combined pri block (way less pri txs) */
-    static const double SUFFICIENT_PRITXS = .1;
-
-    /** Approximately the AllowFree cutoff */
-    static const double MIN_PRIORITY_VAL = 1e8;
 };
 #endif /*BITCOIN_POLICYESTIMATOR_H */
