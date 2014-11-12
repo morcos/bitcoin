@@ -17,7 +17,7 @@ class CTxMemPoolEntry;
  * We will instantiate two instances of this class, one to track transactions
  * that were included in a block due to fee, and one for tx's included due to
  * priority.  We will lump transactions into a bucket according to their approximate
- * fee or priority and then track how long it took for those txs to be included in a block 
+ * fee or priority and then track how long it took for those txs to be included in a block
  */
 class TxConfirmStats
 {
