@@ -38,10 +38,12 @@ private:
     int64_t nTime; // Local time when entering the mempool
     double dPriority; // Priority when entering the mempool
     unsigned int nHeight; // Chain height when entering the mempool
+    bool hadNoDependencies; // Not dependent on any other mempool txs when it entered the mempool
 
 public:
     CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
-                    int64_t _nTime, double _dPriority, unsigned int _nHeight);
+                    int64_t _nTime, double _dPriority, unsigned int _nHeight,
+                    bool hasNoDeps = false);
     CTxMemPoolEntry();
     CTxMemPoolEntry(const CTxMemPoolEntry& other);
 
@@ -51,9 +53,10 @@ public:
     size_t GetTxSize() const { return nTxSize; }
     int64_t GetTime() const { return nTime; }
     unsigned int GetHeight() const { return nHeight; }
+    bool WasClearAtEntry() const { return hadNoDependencies; }
 };
 
-class CMinerPolicyEstimator;
+class CBlockPolicyEstimator;
 
 /** An inpoint - a combination of a transaction and an index n into its vin */
 class CInPoint
@@ -83,7 +86,7 @@ class CTxMemPool
 private:
     bool fSanityCheck; // Normally false, true if -checkmempool or -regtest
     unsigned int nTransactionsUpdated;
-    CMinerPolicyEstimator* minerPolicyEstimator;
+    CBlockPolicyEstimator* minerPolicyEstimator;
 
     CFeeRate minRelayFee; // Passed to constructor to avoid dependency on main
     uint64_t totalTxSize; // sum of all mempool tx' byte sizes
