@@ -269,6 +269,8 @@ CBlockTemplate* CreateNewBlock(const CScript& scriptPubKeyIn)
 
     {
         LOCK2(cs_main, mempool.cs);
+        uint64_t startTime = GetTimeMicros();
+        unsigned int memsize = mempool.mapTx.size();
         CBlockIndex* pindexPrev = chainActive.Tip();
         const int nHeight = pindexPrev->nHeight + 1;
         CCoinsViewCache view(pcoinsTip);
@@ -446,9 +448,11 @@ nexttxn:    (void)1;
                 std::make_heap(vecPriority.begin(), vecPriority.end(), comparer);
         }
 
+        unsigned int blocktxs = pblock->vtx.size();
+        uint64_t creationTime = GetTimeMicros() - startTime;
         nLastBlockTx = nBlockTx;
         nLastBlockSize = nBlockSize;
-        LogPrintf("CreateNewBlock(): total size %u\n", nBlockSize);
+        LogPrintf("CreateNewBlock(): total size %u, %ld %u %u\n", nBlockSize, creationTime, memsize, blocktxs);
 
         // Compute final coinbase transaction.
         txNew.vout[0].nValue = GetBlockValue(nHeight, nFees);
