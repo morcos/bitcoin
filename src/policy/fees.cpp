@@ -332,7 +332,7 @@ bool CBlockPolicyEstimator::isPriDataPoint(const CFeeRate &fee, double pri)
     return false;
 }
 
-void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry)
+void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, bool fCurrentEstimate)
 {
     unsigned int txHeight = entry.GetHeight();
     uint256 hash = entry.GetTx().GetHash();
@@ -344,6 +344,11 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry)
         // affect the estimate.  We'll potentially double count transactions in 1-block reorgs.
         return;
     }
+
+    // Only want to be updating estimates when our blockchain is synced,
+    // otherwise we'll miscalculate how many blocks its taking to get included.
+    if (!fCurrentEstimate)
+        return;
 
     if (!entry.WasClearAtEntry()) {
         // This transaction depends on other transactions in the mempool to
@@ -414,7 +419,8 @@ void CBlockPolicyEstimator::processBlockTx(unsigned int nBlockHeight, const CTxM
     }
 }
 
-void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight, std::vector<CTxMemPoolEntry>& entries)
+void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
+                                         std::vector<CTxMemPoolEntry>& entries, bool fCurrentEstimate)
 {
     if (nBlockHeight <= nBestSeenHeight) {
         // Ignore side chains and re-orgs; assuming they are random
@@ -425,6 +431,11 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight, std::vector<
         return;
     }
     nBestSeenHeight = nBlockHeight;
+
+    // Only want to be updating estimates when our blockchain is synced,
+    // otherwise we'll miscalculate how many blocks its taking to get included.
+    if (!fCurrentEstimate)
+        return;
 
     // Update the dynamic cutoffs
     // a fee/priority is "likely" the reason your tx was included in a block if >85% of such tx's

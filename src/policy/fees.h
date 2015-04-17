@@ -229,13 +229,14 @@ public:
     CBlockPolicyEstimator(const CFeeRate& minRelayFee);
 
     /** Process all the transactions that have been included in a block */
-    void processBlock(unsigned int nBlockHeight, std::vector<CTxMemPoolEntry>& entries);
+    void processBlock(unsigned int nBlockHeight,
+                      std::vector<CTxMemPoolEntry>& entries, bool fCurrentEstimate);
 
     /** Process a transaction confirmed in a block*/
     void processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry& entry);
 
     /** Process a transaction accepted to the mempool*/
-    void processTransaction(const CTxMemPoolEntry& entry);
+    void processTransaction(const CTxMemPoolEntry& entry, bool fCurrentEstimate);
 
     /** Remove a transaction from the mempool tracking stats*/
     void removeTx(uint256 hash);
