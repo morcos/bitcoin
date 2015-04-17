@@ -23,13 +23,12 @@ CTxMemPoolEntry::CTxMemPoolEntry():
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
                                  int64_t _nTime, double _dPriority,
-                                 unsigned int _nHeight):
-    tx(_tx), nFee(_nFee), nTime(_nTime), dPriority(_dPriority), nHeight(_nHeight)
+                                 unsigned int _nHeight, bool poolHasNoInputsOf):
+    tx(_tx), nFee(_nFee), nTime(_nTime), dPriority(_dPriority), nHeight(_nHeight),
+    hadNoDependencies(poolHasNoInputsOf)
 {
     nTxSize = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
-
     nModSize = tx.CalculateModifiedSize(nTxSize);
-    hadNoDependencies = HasNoInputsInPool(mempool);
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
@@ -44,22 +43,6 @@ CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
     double deltaPriority = ((double)(currentHeight-nHeight)*nValueIn)/nModSize;
     double dResult = dPriority + deltaPriority;
     return dResult;
-}
-
-// Check whether all of this transactions inputs are available and the tx is clear
-// to be added to a block (not dependent on other mempool transactions)
-// This relies on the fact that if the transaction gets accepted to the mempool
-// each of its inputs is either in the mempool XOR in the blockchain.
-bool CTxMemPoolEntry::HasNoInputsInPool(const CTxMemPool &pool) const
-{
-    BOOST_FOREACH(const CTxIn &txin, tx.vin)
-    {
-        if (pool.exists(txin.prevout.hash)) {
-            return false;
-        }
-    }
-
-    return true;
 }
 
 CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
@@ -110,7 +93,7 @@ void CTxMemPool::AddTransactionsUpdated(unsigned int n)
 }
 
 
-bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry)
+bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry, bool fCurrentEstimate)
 {
     // Add to memory pool without checking anything.
     // Used by main.cpp AcceptToMemoryPool(), which DOES do
@@ -124,7 +107,7 @@ bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry)
         nTransactionsUpdated++;
         totalTxSize += entry.GetTxSize();
     }
-    minerPolicyEstimator->processTransaction(entry);
+    minerPolicyEstimator->processTransaction(entry, fCurrentEstimate);
     return true;
 }
 
@@ -221,7 +204,7 @@ void CTxMemPool::removeConflicts(const CTransaction &tx, std::list<CTransaction>
  * Called when a block is connected. Removes from mempool and updates the miner fee estimator.
  */
 void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned int nBlockHeight,
-                                std::list<CTransaction>& conflicts)
+                                std::list<CTransaction>& conflicts, bool fCurrentEstimate)
 {
     LOCK(cs);
     std::vector<CTxMemPoolEntry> entries;
@@ -239,7 +222,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
         ClearPrioritisation(tx.GetHash());
     }
     // After the txs in the new block have been removed from the mempool, update policy estimates
-    minerPolicyEstimator->processBlock(nBlockHeight, entries);
+    minerPolicyEstimator->processBlock(nBlockHeight, entries, fCurrentEstimate);
 }
 
 void CTxMemPool::clear()
@@ -416,6 +399,19 @@ void CTxMemPool::ClearPrioritisation(const uint256 hash)
     mapDeltas.erase(hash);
 }
 
+// Check that none of this transactions inputs are in the mempool, and thus
+// the tx is not dependent on other mempool transactions to be included in a block.
+bool CTxMemPool::HasNoInputsOf(const CTransaction &tx) const
+{
+    BOOST_FOREACH(const CTxIn &txin, tx.vin)
+    {
+        if (exists(txin.prevout.hash)) {
+            return false;
+        }
+    }
+
+    return true;
+}
 
 CCoinsViewMemPool::CCoinsViewMemPool(CCoinsView *baseIn, CTxMemPool &mempoolIn) : CCoinsViewBacked(baseIn), mempool(mempoolIn) { }
 
