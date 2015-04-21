@@ -133,6 +133,7 @@ BITCOIN_CORE_H = \
   tinyformat.h \
   txdb.h \
   txmempool.h \
+  txmempoolentry.h \
   ui_interface.h \
   uint256.h \
   undo.h \
@@ -195,6 +196,7 @@ libbitcoin_server_a_SOURCES = \
   timedata.cpp \
   txdb.cpp \
   txmempool.cpp \
+  txmempoolentry.cpp \
   validationinterface.cpp \
   $(JSON_H) \
   $(BITCOIN_CORE_H)
