@@ -60,7 +60,15 @@ unsigned int nCoinCacheSize = 5000;
 /** Fees smaller than this (in satoshi) are considered zero fee (for relaying and mining) */
 CFeeRate minRelayTxFee = CFeeRate(1000);
 
-CTxMemPool mempool(::minRelayTxFee);
+/**
+ * 25 blocks is a compromise between using a lot of disk/memory and
+ * trying to give accurate estimates to people who might be willing
+ * to wait a day or two to save a fraction of a penny in fees.
+ * Confirmation times for very-low-fee transactions that take more
+ * than an hour or three to confirm are highly variable.
+ */
+CBlockPolicyEstimator minerPolicyEstimator(minRelayTxFee);
+CTxMemPool mempool(&minerPolicyEstimator);
 
 struct COrphanTx {
     CTransaction tx;

@@ -15,25 +15,18 @@
 
 using namespace std;
 
-CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
-    nTransactionsUpdated(0)
+CTxMemPool::CTxMemPool(CBlockPolicyEstimator* _minerPolicyEstimator) :
+    nTransactionsUpdated(0),
+    minerPolicyEstimator(_minerPolicyEstimator)
 {
     // Sanity checks off by default for performance, because otherwise
     // accepting transactions becomes O(N^2) where N is the number
     // of transactions in the pool
     fSanityCheck = false;
-
-    // 25 blocks is a compromise between using a lot of disk/memory and
-    // trying to give accurate estimates to people who might be willing
-    // to wait a day or two to save a fraction of a penny in fees.
-    // Confirmation times for very-low-fee transactions that take more
-    // than an hour or three to confirm are highly variable.
-    minerPolicyEstimator = new CBlockPolicyEstimator(_minRelayFee);
 }
 
 CTxMemPool::~CTxMemPool()
 {
-    delete minerPolicyEstimator;
 }
 
 void CTxMemPool::pruneSpent(const uint256 &hashTx, CCoins &coins)
