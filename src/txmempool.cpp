@@ -46,8 +46,7 @@ CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
 }
 
 CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
-    nTransactionsUpdated(0),
-    minRelayFee(_minRelayFee)
+    nTransactionsUpdated(0)
 {
     // Sanity checks off by default for performance, because otherwise
     // accepting transactions becomes O(N^2) where N is the number
@@ -59,7 +58,7 @@ CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
     // to wait a day or two to save a fraction of a penny in fees.
     // Confirmation times for very-low-fee transactions that take more
     // than an hour or three to confirm are highly variable.
-    minerPolicyEstimator = new CBlockPolicyEstimator();
+    minerPolicyEstimator = new CBlockPolicyEstimator(_minRelayFee);
 }
 
 CTxMemPool::~CTxMemPool()
@@ -99,15 +98,14 @@ bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry)
     // Used by main.cpp AcceptToMemoryPool(), which DOES do
     // all the appropriate checks.
     LOCK(cs);
-    {
-        mapTx[hash] = entry;
-        const CTransaction& tx = mapTx[hash].GetTx();
-        for (unsigned int i = 0; i < tx.vin.size(); i++)
-            mapNextTx[tx.vin[i].prevout] = CInPoint(&tx, i);
-        nTransactionsUpdated++;
-        totalTxSize += entry.GetTxSize();
-    }
+    mapTx[hash] = entry;
+    const CTransaction& tx = mapTx[hash].GetTx();
+    for (unsigned int i = 0; i < tx.vin.size(); i++)
+        mapNextTx[tx.vin[i].prevout] = CInPoint(&tx, i);
+    nTransactionsUpdated++;
+    totalTxSize += entry.GetTxSize();
     minerPolicyEstimator->processTransaction(entry);
+
     return true;
 }
 
@@ -362,7 +360,7 @@ CTxMemPool::ReadFeeEstimates(CAutoFile& filein)
             return error("CTxMemPool::ReadFeeEstimates(): up-version (%d) fee estimate file", nVersionRequired);
 
         LOCK(cs);
-        minerPolicyEstimator->Read(filein, minRelayFee);
+        minerPolicyEstimator->Read(filein);
     }
     catch (const std::exception&) {
         LogPrintf("CTxMemPool::ReadFeeEstimates(): unable to read policy estimator data (non-fatal)");
