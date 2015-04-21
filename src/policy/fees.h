@@ -16,7 +16,20 @@ class CAutoFile;
 class CFeeRate;
 class CTxMemPoolEntry;
 
-/** \class CBlockPolicyEstimator
+inline double AllowFreeThreshold()
+{
+    return COIN * 144 / 250;
+}
+
+inline bool AllowFree(double dPriority)
+{
+    // Large (in bytes) low-priority (new, small-coin) transactions
+    // need a fee.
+    return dPriority > AllowFreeThreshold();
+}
+
+/**
+ * \class CBlockPolicyEstimator
  * The BlockPolicyEstimator is used for estimating the fee or priority needed
  * for a transaction to be included in a block within a certain number of
  * blocks.
