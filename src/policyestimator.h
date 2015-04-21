@@ -189,9 +189,11 @@ static const double SUFFICIENT_FEETXS = 1;
 /** Require only an avg of 1 tx every 10 blocks in the combined pri block (way less pri txs) */
 static const double SUFFICIENT_PRITXS = .2;
 
-// Maximum values for tracking fees and priorities
+// Minimum and Maximum values for tracking fees and priorities
+static const double MIN_FEERATE = 10;
 static const double MAX_FEERATE = 1e7;
 static const double INF_FEERATE = MAX_MONEY;
+static const double MIN_PRIORITY = 10;
 static const double MAX_PRIORITY = 1e16;
 static const double INF_PRIORITY = 1e9 * MAX_MONEY;
 
@@ -213,7 +215,7 @@ class CBlockPolicyEstimator
 {
 public:
     /** Create new BlockPolicyEstimator and initialize stats tracking classes with default values */
-    CBlockPolicyEstimator();
+    CBlockPolicyEstimator(const CFeeRate& minRelayFee);
 
     /** Process all the transactions that have been included in a block */
     void processBlock(unsigned int nBlockHeight,
@@ -244,9 +246,11 @@ public:
     void Write(CAutoFile& fileout);
 
     /** Read estimation data from a file */
-    void Read(CAutoFile& filein, const CFeeRate& minRelayFee);
+    void Read(CAutoFile& filein);
 
 private:
+    CFeeRate minTrackedFee; //! Passed to constructor to avoid dependency on main
+    double minTrackedPriority; //! Set to AllowFreeThreshold
     unsigned int nBestSeenHeight;
     struct TxStatsInfo
     {

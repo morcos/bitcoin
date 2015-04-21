@@ -11,8 +11,6 @@
 #include "txmempool.h"
 #include "util.h"
 
-extern CFeeRate minRelayTxFee;
-
 void TxConfirmStats::Initialize(std::vector<double> defaultBuckets, unsigned int maxConfirms, double _decay, std::string _dataTypeString)
 {
     decay = _decay;
@@ -293,17 +291,20 @@ void CBlockPolicyEstimator::removeTx(uint256 hash)
     mapMemPoolTxs.erase(hash);
 }
 
-CBlockPolicyEstimator::CBlockPolicyEstimator() : nBestSeenHeight(0)
+CBlockPolicyEstimator::CBlockPolicyEstimator(const CFeeRate& _minRelayFee)
+    : nBestSeenHeight(0)
 {
+    minTrackedFee = _minRelayFee < CFeeRate(MIN_FEERATE) ? CFeeRate(MIN_FEERATE) : _minRelayFee;
     std::vector<double> vfeelist;
-    for (double bucketBoundary = minRelayTxFee.GetFeePerK(); bucketBoundary <= MAX_FEERATE; bucketBoundary *= FEE_SPACING) {
+    for (double bucketBoundary = minTrackedFee.GetFeePerK(); bucketBoundary <= MAX_FEERATE; bucketBoundary *= FEE_SPACING) {
         vfeelist.push_back(bucketBoundary);
     }
     vfeelist.push_back(INF_FEERATE);
     feeStats.Initialize(vfeelist, MAX_BLOCK_CONFIRMS, DEFAULT_DECAY, "FeeRate");
 
+    minTrackedPriority = AllowFreeThreshold() < MIN_PRIORITY ? MIN_PRIORITY : AllowFreeThreshold();
     std::vector<double> vprilist;
-    for (double bucketBoundary = AllowFreeThreshold(); bucketBoundary <= MAX_PRIORITY; bucketBoundary *= PRI_SPACING) {
+    for (double bucketBoundary = minTrackedPriority; bucketBoundary <= MAX_PRIORITY; bucketBoundary *= PRI_SPACING) {
         vprilist.push_back(bucketBoundary);
     }
     vprilist.push_back(INF_PRIORITY);
@@ -317,7 +318,7 @@ CBlockPolicyEstimator::CBlockPolicyEstimator() : nBestSeenHeight(0)
 
 bool CBlockPolicyEstimator::isFeeDataPoint(const CFeeRate &fee, double pri)
 {
-    if ((pri < AllowFreeThreshold() && fee >= minRelayTxFee) ||
+    if ((pri < minTrackedPriority && fee >= minTrackedFee) ||
         (pri < priUnlikely && fee > feeLikely)) {
         return true;
     }
@@ -326,7 +327,7 @@ bool CBlockPolicyEstimator::isFeeDataPoint(const CFeeRate &fee, double pri)
 
 bool CBlockPolicyEstimator::isPriDataPoint(const CFeeRate &fee, double pri)
 {
-    if ((fee < minRelayTxFee && pri >= AllowFreeThreshold()) ||
+    if ((fee < minTrackedFee && pri >= minTrackedPriority) ||
         (fee < feeUnlikely && pri > priLikely)) {
         return true;
     }
@@ -467,8 +468,8 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     priStats.ClearCurrent(nBlockHeight);
 
     // Repopulate the current block states
-    BOOST_FOREACH (const CTxMemPoolEntry& entry, entries)
-        processBlockTx(nBlockHeight, entry);
+    for (unsigned int i = 0; i < entries.size(); i++)
+        processBlockTx(nBlockHeight, entries[i]);
 
     // Update all exponential averages with the current block states
     feeStats.UpdateMovingAverages();
@@ -508,7 +509,7 @@ void CBlockPolicyEstimator::Write(CAutoFile& fileout)
     priStats.Write(fileout);
 }
 
-void CBlockPolicyEstimator::Read(CAutoFile& filein, const CFeeRate& minRelayFee)
+void CBlockPolicyEstimator::Read(CAutoFile& filein)
 {
     int nFileBestSeenHeight;
     filein >> nFileBestSeenHeight;
