@@ -54,16 +54,17 @@ void CTxMemPool::AddTransactionsUpdated(unsigned int n)
     nTransactionsUpdated += n;
 }
 
-
-bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry, bool fCurrentEstimate)
+bool CTxMemPool::addUnchecked(const CTransaction& temptx, const CAmount& nFee, int64_t nTime, double dPriority, unsigned int nHeight, bool fCurrentEstimate)
 {
+    const uint256& hash = temptx.GetHash();
     // Add to memory pool without checking anything.
     // Used by main.cpp AcceptToMemoryPool(), which DOES do
     // all the appropriate checks.
     LOCK(cs);
-    mapTx[hash] = entry;
-    const CTransaction& tx = mapTx[hash].GetTx();
-    for (unsigned int i = 0; i < tx.vin.size(); i++)
+    mapTx[hash] = CTxMemPoolEntry(temptx, nFee, nTime, dPriority, nHeight, HasNoInputsOf(temptx));
+    const CTxMemPoolEntry& entry = mapTx[hash];
+    const CTransaction& tx = entry.GetTx();
+    for (unsigned int i = 0; i < tx.vin.size(); i++) 
         mapNextTx[tx.vin[i].prevout] = CInPoint(&tx, i);
     nTransactionsUpdated++;
     totalTxSize += entry.GetTxSize();

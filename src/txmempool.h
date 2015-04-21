@@ -67,7 +67,11 @@ public:
     void check(const CCoinsViewCache *pcoins) const;
     void setSanityCheck(bool _fSanityCheck) { fSanityCheck = _fSanityCheck; }
 
-    bool addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry, bool fCurrentEstimate = true);
+    /**
+     * Creates a new entry from the paramters and adds it to the mempool.
+     * Calls HasNoInputsOf to calculate CTxMemPoolEntry::hadNoDependencies.
+     */
+    bool addUnchecked(const CTransaction& tx, const CAmount& nFee, int64_t nTime, double dPriority, unsigned int nHeight, bool fCurrentEstimate = true);
     void remove(const CTransaction &tx, std::list<CTransaction>& removed, bool fRecursive = false);
     void removeCoinbaseSpends(const CCoinsViewCache *pcoins, unsigned int nMemPoolHeight);
     void removeConflicts(const CTransaction &tx, std::list<CTransaction>& removed);

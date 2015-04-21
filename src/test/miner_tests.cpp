@@ -56,7 +56,6 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     CBlockTemplate *pblocktemplate;
     CMutableTransaction tx,tx2;
     CScript script;
-    uint256 hash;
 
     LOCK(cs_main);
     Checkpoints::fEnabled = false;
@@ -104,9 +103,8 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     for (unsigned int i = 0; i < 1001; ++i)
     {
         tx.vout[0].nValue -= 1000000;
-        hash = tx.GetHash();
-        mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
-        tx.vin[0].prevout.hash = hash;
+        mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
+        tx.vin[0].prevout.hash = tx.GetHash();
     }
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
@@ -124,17 +122,15 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     for (unsigned int i = 0; i < 128; ++i)
     {
         tx.vout[0].nValue -= 10000000;
-        hash = tx.GetHash();
-        mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
-        tx.vin[0].prevout.hash = hash;
+        mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
+        tx.vin[0].prevout.hash = tx.GetHash();
     }
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
     mempool.clear();
 
     // orphan in mempool
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
     mempool.clear();
@@ -143,16 +139,14 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.vin[0].scriptSig = CScript() << OP_1;
     tx.vin[0].prevout.hash = txFirst[1]->GetHash();
     tx.vout[0].nValue = 4900000000LL;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
-    tx.vin[0].prevout.hash = hash;
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
+    tx.vin[0].prevout.hash = tx.GetHash();
     tx.vin.resize(2);
     tx.vin[1].scriptSig = CScript() << OP_1;
     tx.vin[1].prevout.hash = txFirst[0]->GetHash();
     tx.vin[1].prevout.n = 0;
     tx.vout[0].nValue = 5900000000LL;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
     mempool.clear();
@@ -162,8 +156,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.vin[0].prevout.SetNull();
     tx.vin[0].scriptSig = CScript() << OP_0 << OP_1;
     tx.vout[0].nValue = 0;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
     mempool.clear();
@@ -175,13 +168,11 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.vout[0].nValue = 4900000000LL;
     script = CScript() << OP_0;
     tx.vout[0].scriptPubKey = GetScriptForDestination(CScriptID(script));
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
-    tx.vin[0].prevout.hash = hash;
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
+    tx.vin[0].prevout.hash = tx.GetHash();
     tx.vin[0].scriptSig = CScript() << (std::vector<unsigned char>)script;
     tx.vout[0].nValue -= 1000000;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
     mempool.clear();
@@ -191,11 +182,9 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.vin[0].scriptSig = CScript() << OP_1;
     tx.vout[0].nValue = 4900000000LL;
     tx.vout[0].scriptPubKey = CScript() << OP_1;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     tx.vout[0].scriptPubKey = CScript() << OP_2;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
     delete pblocktemplate;
     mempool.clear();
@@ -220,8 +209,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.vout[0].nValue = 4900000000LL;
     tx.vout[0].scriptPubKey = CScript() << OP_1;
     tx.nLockTime = chainActive.Tip()->nHeight+1;
-    hash = tx.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(!IsFinalTx(tx, chainActive.Tip()->nHeight + 1));
 
     // time locked
@@ -234,8 +222,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx2.vout[0].nValue = 4900000000LL;
     tx2.vout[0].scriptPubKey = CScript() << OP_1;
     tx2.nLockTime = chainActive.Tip()->GetMedianTimePast()+1;
-    hash = tx2.GetHash();
-    mempool.addUnchecked(hash, CTxMemPoolEntry(tx2, 11, GetTime(), 111.0, 11));
+    mempool.addUnchecked(tx2, 11, GetTime(), 111.0, 11);
     BOOST_CHECK(!IsFinalTx(tx2));
 
     BOOST_CHECK(pblocktemplate = CreateNewBlock(scriptPubKey));
