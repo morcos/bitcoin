@@ -7,7 +7,7 @@
 
 #include "clientversion.h"
 #include "main.h"
-#include "policyestimator.h"
+#include "policy/fees.h"
 #include "streams.h"
 #include "util.h"
 #include "utilmoneystr.h"
