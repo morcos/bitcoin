@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #if defined(HAVE_CONFIG_H)
@@ -18,7 +18,7 @@
 #include "txdb.h" // for -dbcache defaults
 
 #ifdef ENABLE_WALLET
-#include "wallet.h" // for CWallet::minTxFee
+#include "wallet/wallet.h" // for CWallet::minTxFee
 #endif
 
 #include <boost/thread.hpp>
@@ -38,7 +38,6 @@ OptionsDialog::OptionsDialog(QWidget *parent, bool enableWallet) :
     fProxyIpValid(true)
 {
     ui->setupUi(this);
-    GUIUtil::restoreWindowGeometry("nOptionsDialogWindow", this->size(), this);
 
     /* Main elements init */
     ui->databaseCache->setMinimum(nMinDbCache);
@@ -117,7 +116,6 @@ OptionsDialog::OptionsDialog(QWidget *parent, bool enableWallet) :
 
 OptionsDialog::~OptionsDialog()
 {
-    GUIUtil::saveWindowGeometry("nOptionsDialogWindow", this);
     delete ui;
 }
 

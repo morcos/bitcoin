@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "guiutil.h"
@@ -40,6 +40,7 @@
 #if BOOST_FILESYSTEM_VERSION >= 3
 #include <boost/filesystem/detail/utf8_codecvt_facet.hpp>
 #endif
+#include <boost/scoped_array.hpp>
 
 #include <QAbstractItemView>
 #include <QApplication>
@@ -67,6 +68,9 @@ static boost::filesystem::detail::utf8_codecvt_facet utf8;
 
 #if defined(Q_OS_MAC)
 extern double NSAppKitVersionNumber;
+#if !defined(NSAppKitVersionNumber10_8)
+#define NSAppKitVersionNumber10_8 1187
+#endif
 #if !defined(NSAppKitVersionNumber10_9)
 #define NSAppKitVersionNumber10_9 1265
 #endif
@@ -383,7 +387,7 @@ void openDebugLogfile()
         QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathDebug)));
 }
 
-void SubstituteFonts()
+void SubstituteFonts(const QString& language)
 {
 #if defined(Q_OS_MAC)
 // Background:
@@ -393,12 +397,28 @@ void SubstituteFonts()
 // If this fallback is not properly loaded, some characters may fail to
 // render correctly.
 //
+// The same thing happened with 10.10. .Helvetica Neue DeskInterface is now default.
+//
 // Solution: If building with the 10.7 SDK or lower and the user's platform
 // is 10.9 or higher at runtime, substitute the correct font. This needs to
 // happen before the QApplication is created.
 #if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_8
-    if (floor(NSAppKitVersionNumber) >= NSAppKitVersionNumber10_9)
-        QFont::insertSubstitution(".Lucida Grande UI", "Lucida Grande");
+    if (floor(NSAppKitVersionNumber) > NSAppKitVersionNumber10_8)
+    {
+        if (floor(NSAppKitVersionNumber) <= NSAppKitVersionNumber10_9)
+            /* On a 10.9 - 10.9.x system */
+            QFont::insertSubstitution(".Lucida Grande UI", "Lucida Grande");
+        else
+        {
+            /* 10.10 or later system */
+            if (language == "zh_CN" || language == "zh_TW" || language == "zh_HK") // traditional or simplified Chinese
+              QFont::insertSubstitution(".Helvetica Neue DeskInterface", "Heiti SC");
+            else if (language == "ja") // Japanesee
+              QFont::insertSubstitution(".Helvetica Neue DeskInterface", "Songti SC");
+            else
+              QFont::insertSubstitution(".Helvetica Neue DeskInterface", "Lucida Grande");
+        }
+    }
 #endif
 #endif
 }
@@ -548,12 +568,17 @@ TableViewLastColumnResizingFixer::TableViewLastColumnResizingFixer(QTableView* t
 #ifdef WIN32
 boost::filesystem::path static StartupShortcutPath()
 {
+    if (GetBoolArg("-testnet", false))
+        return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin (testnet).lnk";
+    else if (GetBoolArg("-regtest", false))
+        return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin (regtest).lnk";
+
     return GetSpecialFolderPath(CSIDL_STARTUP) / "Bitcoin.lnk";
 }
 
 bool GetStartOnSystemStartup()
 {
-    // check for Bitcoin.lnk
+    // check for Bitcoin*.lnk
     return boost::filesystem::exists(StartupShortcutPath());
 }
 
@@ -569,8 +594,8 @@ bool SetStartOnSystemStartup(bool fAutoStart)
         // Get a pointer to the IShellLink interface.
         IShellLink* psl = NULL;
         HRESULT hres = CoCreateInstance(CLSID_ShellLink, NULL,
-                                CLSCTX_INPROC_SERVER, IID_IShellLink,
-                                reinterpret_cast<void**>(&psl));
+            CLSCTX_INPROC_SERVER, IID_IShellLink,
+            reinterpret_cast<void**>(&psl));
 
         if (SUCCEEDED(hres))
         {
@@ -578,20 +603,34 @@ bool SetStartOnSystemStartup(bool fAutoStart)
             TCHAR pszExePath[MAX_PATH];
             GetModuleFileName(NULL, pszExePath, sizeof(pszExePath));
 
-            TCHAR pszArgs[5] = TEXT("-min");
+            // Start client minimized
+            QString strArgs = "-min";
+            // Set -testnet /-regtest options
+            strArgs += QString::fromStdString(strprintf(" -testnet=%d -regtest=%d", GetBoolArg("-testnet", false), GetBoolArg("-regtest", false)));
+
+#ifdef UNICODE
+            boost::scoped_array<TCHAR> args(new TCHAR[strArgs.length() + 1]);
+            // Convert the QString to TCHAR*
+            strArgs.toWCharArray(args.get());
+            // Add missing '\0'-termination to string
+            args[strArgs.length()] = '\0';
+#endif
 
             // Set the path to the shortcut target
             psl->SetPath(pszExePath);
             PathRemoveFileSpec(pszExePath);
             psl->SetWorkingDirectory(pszExePath);
             psl->SetShowCmd(SW_SHOWMINNOACTIVE);
-            psl->SetArguments(pszArgs);
+#ifndef UNICODE
+            psl->SetArguments(strArgs.toStdString().c_str());
+#else
+            psl->SetArguments(args.get());
+#endif
 
             // Query IShellLink for the IPersistFile interface for
             // saving the shortcut in persistent storage.
             IPersistFile* ppf = NULL;
-            hres = psl->QueryInterface(IID_IPersistFile,
-                                       reinterpret_cast<void**>(&ppf));
+            hres = psl->QueryInterface(IID_IPersistFile, reinterpret_cast<void**>(&ppf));
             if (SUCCEEDED(hres))
             {
                 WCHAR pwsz[MAX_PATH];
@@ -611,11 +650,10 @@ bool SetStartOnSystemStartup(bool fAutoStart)
     }
     return true;
 }
-
 #elif defined(Q_OS_LINUX)
 
 // Follow the Desktop Application Autostart Spec:
-//  http://standards.freedesktop.org/autostart-spec/autostart-spec-latest.html
+// http://standards.freedesktop.org/autostart-spec/autostart-spec-latest.html
 
 boost::filesystem::path static GetAutostartDir()
 {
@@ -671,8 +709,13 @@ bool SetStartOnSystemStartup(bool fAutoStart)
         // Write a bitcoin.desktop file to the autostart directory:
         optionFile << "[Desktop Entry]\n";
         optionFile << "Type=Application\n";
-        optionFile << "Name=Bitcoin\n";
-        optionFile << "Exec=" << pszExePath << " -min\n";
+        if (GetBoolArg("-testnet", false))
+            optionFile << "Name=Bitcoin (testnet)\n";
+        else if (GetBoolArg("-regtest", false))
+            optionFile << "Name=Bitcoin (regtest)\n";
+        else
+            optionFile << "Name=Bitcoin\n";
+        optionFile << "Exec=" << pszExePath << strprintf(" -min -testnet=%d -regtest=%d\n", GetBoolArg("-testnet", false), GetBoolArg("-regtest", false));
         optionFile << "Terminal=false\n";
         optionFile << "Hidden=false\n";
         optionFile.close();
@@ -696,7 +739,18 @@ LSSharedFileListItemRef findStartupItemInList(LSSharedFileListRef list, CFURLRef
         LSSharedFileListItemRef item = (LSSharedFileListItemRef)CFArrayGetValueAtIndex(listSnapshot, i);
         UInt32 resolutionFlags = kLSSharedFileListNoUserInteraction | kLSSharedFileListDoNotMountVolumes;
         CFURLRef currentItemURL = NULL;
+
+#if defined(MAC_OS_X_VERSION_MAX_ALLOWED) && MAC_OS_X_VERSION_MAX_ALLOWED >= 10100
+    if(&LSSharedFileListItemCopyResolvedURL)
+        currentItemURL = LSSharedFileListItemCopyResolvedURL(item, resolutionFlags, NULL);
+#if defined(MAC_OS_X_VERSION_MIN_REQUIRED) && MAC_OS_X_VERSION_MIN_REQUIRED < 10100
+    else
         LSSharedFileListItemResolve(item, resolutionFlags, &currentItemURL, NULL);
+#endif
+#else
+    LSSharedFileListItemResolve(item, resolutionFlags, &currentItemURL, NULL);
+#endif
+
         if(currentItemURL && CFEqual(currentItemURL, findUrl)) {
             // found
             CFRelease(currentItemURL);
@@ -824,10 +878,13 @@ QString formatServicesStr(quint64 mask)
             switch (check)
             {
             case NODE_NETWORK:
-                strList.append(QObject::tr("NETWORK"));
+                strList.append("NETWORK");
+                break;
+            case NODE_GETUTXO:
+                strList.append("GETUTXO");
                 break;
             default:
-                strList.append(QString("%1[%2]").arg(QObject::tr("UNKNOWN")).arg(check));
+                strList.append(QString("%1[%2]").arg("UNKNOWN").arg(check));
             }
         }
     }
@@ -841,6 +898,11 @@ QString formatServicesStr(quint64 mask)
 QString formatPingTime(double dPingTime)
 {
     return dPingTime == 0 ? QObject::tr("N/A") : QString(QObject::tr("%1 ms")).arg(QString::number((int)(dPingTime * 1000), 10));
+}
+
+QString formatTimeOffset(int64_t nTimeOffset)
+{
+  return QString(QObject::tr("%1 s")).arg(QString::number((int)nTimeOffset, 10));
 }
 
 } // namespace GUIUtil

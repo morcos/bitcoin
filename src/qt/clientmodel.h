@@ -1,11 +1,12 @@
-// Copyright (c) 2011-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_QT_CLIENTMODEL_H
 #define BITCOIN_QT_CLIENTMODEL_H
 
 #include <QObject>
+#include <QDateTime>
 
 class AddressTableModel;
 class OptionsModel;
@@ -15,7 +16,6 @@ class TransactionTableModel;
 class CWallet;
 
 QT_BEGIN_NAMESPACE
-class QDateTime;
 class QTimer;
 QT_END_NAMESPACE
 
@@ -48,7 +48,6 @@ public:
     //! Return number of connections, default is in- and outbound (total)
     int getNumConnections(unsigned int flags = CONNECTIONS_ALL) const;
     int getNumBlocks() const;
-    int getNumBlocksAtStartup();
 
     quint64 getTotalBytesRecv() const;
     quint64 getTotalBytesSent() const;
@@ -74,10 +73,9 @@ private:
     PeerTableModel *peerTableModel;
 
     int cachedNumBlocks;
+    QDateTime cachedBlockDate;
     bool cachedReindexing;
     bool cachedImporting;
-
-    int numBlocksAtStartup;
 
     QTimer *pollTimer;
 
@@ -86,7 +84,7 @@ private:
 
 signals:
     void numConnectionsChanged(int count);
-    void numBlocksChanged(int count);
+    void numBlocksChanged(int count, const QDateTime& blockDate);
     void alertsChanged(const QString &warnings);
     void bytesChanged(quint64 totalBytesIn, quint64 totalBytesOut);
 

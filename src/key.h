@@ -1,13 +1,13 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_KEY_H
 #define BITCOIN_KEY_H
 
-#include "allocators.h"
 #include "serialize.h"
+#include "support/allocators/secure.h"
 #include "uint256.h"
 
 #include <stdexcept>
@@ -124,8 +124,7 @@ public:
 
     /**
      * Create a DER-serialized signature.
-     * The test_case parameter tweaks the deterministic nonce, and is only for
-     * testing. It should be zero for normal use.
+     * The test_case parameter tweaks the deterministic nonce.
      */
     bool Sign(const uint256& hash, std::vector<unsigned char>& vchSig, uint32_t test_case = 0) const;
 

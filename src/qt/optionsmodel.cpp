@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2014 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2014 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #if defined(HAVE_CONFIG_H)
@@ -18,8 +18,8 @@
 #include "txdb.h" // for -dbcache defaults
 
 #ifdef ENABLE_WALLET
-#include "wallet.h"
-#include "walletdb.h"
+#include "wallet/wallet.h"
+#include "wallet/walletdb.h"
 #endif
 
 #include <QNetworkProxy>
@@ -335,8 +335,8 @@ bool OptionsModel::getProxySettings(QNetworkProxy& proxy) const
     proxyType curProxy;
     if (GetProxy(NET_IPV4, curProxy)) {
         proxy.setType(QNetworkProxy::Socks5Proxy);
-        proxy.setHostName(QString::fromStdString(curProxy.ToStringIP()));
-        proxy.setPort(curProxy.GetPort());
+        proxy.setHostName(QString::fromStdString(curProxy.proxy.ToStringIP()));
+        proxy.setPort(curProxy.proxy.GetPort());
 
         return true;
     }

@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,6 +7,7 @@
 #define BITCOIN_SCRIPT_INTERPRETER_H
 
 #include "script_error.h"
+#include "primitives/transaction.h"
 
 #include <vector>
 #include <stdint.h>
@@ -67,8 +68,14 @@ enum
     // discouraged NOPs fails the script. This verification flag will never be
     // a mandatory flag applied to scripts in a block. NOPs that are not
     // executed, e.g.  within an unexecuted IF ENDIF block, are *not* rejected.
-    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS  = (1U << 7)
+    SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS  = (1U << 7),
 
+    // Require that only a single stack element remains after evaluation. This changes the success criterion from
+    // "At least one stack element must remain, and when interpreted as a boolean, it must be true" to
+    // "Exactly one stack element must remain, and when interpreted as a boolean, it must be true".
+    // (softfork safe, BIP62 rule 6)
+    // Note: CLEANSTACK should never be used without P2SH.
+    SCRIPT_VERIFY_CLEANSTACK = (1U << 8),
 };
 
 uint256 SignatureHash(const CScript &scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType);
@@ -84,18 +91,27 @@ public:
     virtual ~BaseSignatureChecker() {}
 };
 
-class SignatureChecker : public BaseSignatureChecker
+class TransactionSignatureChecker : public BaseSignatureChecker
 {
 private:
-    const CTransaction& txTo;
+    const CTransaction* txTo;
     unsigned int nIn;
 
 protected:
     virtual bool VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const;
 
 public:
-    SignatureChecker(const CTransaction& txToIn, unsigned int nInIn) : txTo(txToIn), nIn(nInIn) {}
+    TransactionSignatureChecker(const CTransaction* txToIn, unsigned int nInIn) : txTo(txToIn), nIn(nInIn) {}
     bool CheckSig(const std::vector<unsigned char>& scriptSig, const std::vector<unsigned char>& vchPubKey, const CScript& scriptCode) const;
+};
+
+class MutableTransactionSignatureChecker : public TransactionSignatureChecker
+{
+private:
+    const CTransaction txTo;
+
+public:
+    MutableTransactionSignatureChecker(const CMutableTransaction* txToIn, unsigned int nInIn) : TransactionSignatureChecker(&txTo, nInIn), txTo(*txToIn) {}
 };
 
 bool EvalScript(std::vector<std::vector<unsigned char> >& stack, const CScript& script, unsigned int flags, const BaseSignatureChecker& checker, ScriptError* error = NULL);

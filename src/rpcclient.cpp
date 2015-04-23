@@ -1,5 +1,5 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -29,9 +29,11 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "getaddednodeinfo", 0 },
     { "setgenerate", 0 },
     { "setgenerate", 1 },
+    { "generate", 0 },
     { "getnetworkhashps", 0 },
     { "getnetworkhashps", 1 },
     { "sendtoaddress", 1 },
+    { "sendtoaddress", 4 },
     { "settxfee", 0 },
     { "getreceivedbyaddress", 1 },
     { "getreceivedbyaccount", 1 },
@@ -59,6 +61,7 @@ static const CRPCConvertParam vRPCConvertParams[] =
     { "listsinceblock", 2 },
     { "sendmany", 1 },
     { "sendmany", 2 },
+    { "sendmany", 4 },
     { "addmultisigaddress", 0 },
     { "addmultisigaddress", 1 },
     { "createmultisig", 0 },

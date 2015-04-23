@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2013 The Bitcoin Core developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "rpcserver.h"
@@ -7,6 +7,8 @@
 
 #include "base58.h"
 #include "netbase.h"
+
+#include "test/test_bitcoin.h"
 
 #include <boost/algorithm/string.hpp>
 #include <boost/test/unit_test.hpp>
@@ -39,14 +41,13 @@ Value CallRPC(string args)
         Value result = (*method)(params, false);
         return result;
     }
-    catch (Object& objError)
-    {
+    catch (const Object& objError) {
         throw runtime_error(find_value(objError, "message").get_str());
     }
 }
 
 
-BOOST_AUTO_TEST_SUITE(rpc_tests)
+BOOST_FIXTURE_TEST_SUITE(rpc_tests, TestingSetup)
 
 BOOST_AUTO_TEST_CASE(rpc_rawparams)
 {

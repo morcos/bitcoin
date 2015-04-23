@@ -1,11 +1,12 @@
 // Copyright (c) 2012-2013 The Bitcoin Core developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "mruset.h"
 
 #include "random.h"
 #include "util.h"
+#include "test/test_bitcoin.h"
 
 #include <set>
 
@@ -34,7 +35,7 @@ public:
     }
 };
 
-BOOST_AUTO_TEST_SUITE(mruset_tests)
+BOOST_FIXTURE_TEST_SUITE(mruset_tests, BasicTestingSetup)
 
 // Test that an mruset behaves like a set, as long as no more than MAX_SIZE elements are in it
 BOOST_AUTO_TEST_CASE(mruset_like_set)

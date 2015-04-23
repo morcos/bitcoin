@@ -1,5 +1,5 @@
-// Copyright (c) 2009-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2009-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_NETBASE_H
@@ -162,21 +162,31 @@ class CService : public CNetAddr
         inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
             READWRITE(FLATDATA(ip));
             unsigned short portN = htons(port);
-            READWRITE(portN);
+            READWRITE(FLATDATA(portN));
             if (ser_action.ForRead())
                  port = ntohs(portN);
         }
 };
 
-typedef CService proxyType;
+class proxyType
+{
+public:
+    proxyType(): randomize_credentials(false) {}
+    proxyType(const CService &proxy, bool randomize_credentials=false): proxy(proxy), randomize_credentials(randomize_credentials) {}
+
+    bool IsValid() const { return proxy.IsValid(); }
+
+    CService proxy;
+    bool randomize_credentials;
+};
 
 enum Network ParseNetwork(std::string net);
 std::string GetNetworkName(enum Network net);
 void SplitHostPort(std::string in, int &portOut, std::string &hostOut);
-bool SetProxy(enum Network net, CService addrProxy);
+bool SetProxy(enum Network net, const proxyType &addrProxy);
 bool GetProxy(enum Network net, proxyType &proxyInfoOut);
 bool IsProxy(const CNetAddr &addr);
-bool SetNameProxy(CService addrProxy);
+bool SetNameProxy(const proxyType &addrProxy);
 bool HaveNameProxy();
 bool LookupHost(const char *pszName, std::vector<CNetAddr>& vIP, unsigned int nMaxSolutions = 0, bool fAllowLookup = true);
 bool Lookup(const char *pszName, CService& addr, int portDefault = 0, bool fAllowLookup = true);

@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_QT_TRANSACTIONVIEW_H
@@ -49,10 +49,10 @@ public:
     };
 
     enum ColumnWidths {
-        STATUS_COLUMN_WIDTH = 23,
+        STATUS_COLUMN_WIDTH = 30,
         WATCHONLY_COLUMN_WIDTH = 23,
         DATE_COLUMN_WIDTH = 120,
-        TYPE_COLUMN_WIDTH = 120,
+        TYPE_COLUMN_WIDTH = 113,
         AMOUNT_MINIMUM_COLUMN_WIDTH = 120,
         MINIMUM_COLUMN_WIDTH = 23
     };

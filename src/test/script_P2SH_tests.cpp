@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2013 The Bitcoin Core developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "key.h"
@@ -8,9 +8,10 @@
 #include "script/script.h"
 #include "script/script_error.h"
 #include "script/sign.h"
+#include "test/test_bitcoin.h"
 
 #ifdef ENABLE_WALLET
-#include "wallet_ismine.h"
+#include "wallet/wallet_ismine.h"
 #endif
 
 #include <vector>
@@ -43,11 +44,11 @@ Verify(const CScript& scriptSig, const CScript& scriptPubKey, bool fStrict, Scri
     txTo.vin[0].scriptSig = scriptSig;
     txTo.vout[0].nValue = 1;
 
-    return VerifyScript(scriptSig, scriptPubKey, fStrict ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE, SignatureChecker(txTo, 0), &err);
+    return VerifyScript(scriptSig, scriptPubKey, fStrict ? SCRIPT_VERIFY_P2SH : SCRIPT_VERIFY_NONE, MutableTransactionSignatureChecker(&txTo, 0), &err);
 }
 
 
-BOOST_AUTO_TEST_SUITE(script_P2SH_tests)
+BOOST_FIXTURE_TEST_SUITE(script_P2SH_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(sign)
 {
@@ -210,7 +211,7 @@ BOOST_AUTO_TEST_CASE(set)
 BOOST_AUTO_TEST_CASE(is)
 {
     // Test CScript::IsPayToScriptHash()
-    uint160 dummy(0);
+    uint160 dummy;
     CScript p2sh;
     p2sh << OP_HASH160 << ToByteVector(dummy) << OP_EQUAL;
     BOOST_CHECK(p2sh.IsPayToScriptHash());

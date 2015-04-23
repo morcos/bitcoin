@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2009-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_TEST_BIGNUM_H
@@ -37,14 +37,14 @@ public:
         if (!BN_copy(this, &b))
         {
             BN_clear_free(this);
-            throw bignum_error("CBigNum::CBigNum(const CBigNum&) : BN_copy failed");
+            throw bignum_error("CBigNum::CBigNum(const CBigNum&): BN_copy failed");
         }
     }
 
     CBigNum& operator=(const CBigNum& b)
     {
         if (!BN_copy(this, &b))
-            throw bignum_error("CBigNum::operator= : BN_copy failed");
+            throw bignum_error("CBigNum::operator=: BN_copy failed");
         return (*this);
     }
 
@@ -151,7 +151,7 @@ inline const CBigNum operator+(const CBigNum& a, const CBigNum& b)
 {
     CBigNum r;
     if (!BN_add(&r, &a, &b))
-        throw bignum_error("CBigNum::operator+ : BN_add failed");
+        throw bignum_error("CBigNum::operator+: BN_add failed");
     return r;
 }
 
@@ -159,7 +159,7 @@ inline const CBigNum operator-(const CBigNum& a, const CBigNum& b)
 {
     CBigNum r;
     if (!BN_sub(&r, &a, &b))
-        throw bignum_error("CBigNum::operator- : BN_sub failed");
+        throw bignum_error("CBigNum::operator-: BN_sub failed");
     return r;
 }
 

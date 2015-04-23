@@ -1,5 +1,5 @@
 // Copyright (c) 2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,8 +26,6 @@
 #include "json/json_spirit_writer_template.h"
 
 using namespace std;
-using namespace boost;
-using namespace boost::asio;
 using namespace json_spirit;
 
 //! Number of bytes to allocate and read at most at once in post data

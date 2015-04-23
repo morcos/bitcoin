@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2009-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "chainparamsbase.h"
@@ -15,28 +15,26 @@
 #define _(x) std::string(x) /* Keep the _() around in case gettext or such will be used later to translate non-UI */
 
 using namespace std;
-using namespace boost;
-using namespace boost::asio;
 using namespace json_spirit;
 
 std::string HelpMessageCli()
 {
     string strUsage;
-    strUsage += _("Options:") + "\n";
-    strUsage += "  -?                     " + _("This help message") + "\n";
-    strUsage += "  -conf=<file>           " + strprintf(_("Specify configuration file (default: %s)"), "bitcoin.conf") + "\n";
-    strUsage += "  -datadir=<dir>         " + _("Specify data directory") + "\n";
-    strUsage += "  -testnet               " + _("Use the test network") + "\n";
-    strUsage += "  -regtest               " + _("Enter regression test mode, which uses a special chain in which blocks can be "
-                                                "solved instantly. This is intended for regression testing tools and app development.") + "\n";
-    strUsage += "  -rpcconnect=<ip>       " + strprintf(_("Send commands to node running on <ip> (default: %s)"), "127.0.0.1") + "\n";
-    strUsage += "  -rpcport=<port>        " + strprintf(_("Connect to JSON-RPC on <port> (default: %u or testnet: %u)"), 8332, 18332) + "\n";
-    strUsage += "  -rpcwait               " + _("Wait for RPC server to start") + "\n";
-    strUsage += "  -rpcuser=<user>        " + _("Username for JSON-RPC connections") + "\n";
-    strUsage += "  -rpcpassword=<pw>      " + _("Password for JSON-RPC connections") + "\n";
+    strUsage += HelpMessageGroup(_("Options:"));
+    strUsage += HelpMessageOpt("-?", _("This help message"));
+    strUsage += HelpMessageOpt("-conf=<file>", strprintf(_("Specify configuration file (default: %s)"), "bitcoin.conf"));
+    strUsage += HelpMessageOpt("-datadir=<dir>", _("Specify data directory"));
+    strUsage += HelpMessageOpt("-testnet", _("Use the test network"));
+    strUsage += HelpMessageOpt("-regtest", _("Enter regression test mode, which uses a special chain in which blocks can be "
+                                             "solved instantly. This is intended for regression testing tools and app development."));
+    strUsage += HelpMessageOpt("-rpcconnect=<ip>", strprintf(_("Send commands to node running on <ip> (default: %s)"), "127.0.0.1"));
+    strUsage += HelpMessageOpt("-rpcport=<port>", strprintf(_("Connect to JSON-RPC on <port> (default: %u or testnet: %u)"), 8332, 18332));
+    strUsage += HelpMessageOpt("-rpcwait", _("Wait for RPC server to start"));
+    strUsage += HelpMessageOpt("-rpcuser=<user>", _("Username for JSON-RPC connections"));
+    strUsage += HelpMessageOpt("-rpcpassword=<pw>", _("Password for JSON-RPC connections"));
 
-    strUsage += "\n" + _("SSL options: (see the Bitcoin Wiki for SSL setup instructions)") + "\n";
-    strUsage += "  -rpcssl                " + _("Use OpenSSL (https) for JSON-RPC connections") + "\n";
+    strUsage += HelpMessageGroup(_("SSL options: (see the Bitcoin Wiki for SSL setup instructions)"));
+    strUsage += HelpMessageOpt("-rpcssl", _("Use OpenSSL (https) for JSON-RPC connections"));
 
     return strUsage;
 }
@@ -86,7 +84,7 @@ static bool AppInitRPC(int argc, char* argv[])
     }
     try {
         ReadConfigFile(mapArgs, mapMultiArgs);
-    } catch(std::exception &e) {
+    } catch (const std::exception& e) {
         fprintf(stderr,"Error reading configuration file: %s\n", e.what());
         return false;
     }
@@ -108,12 +106,12 @@ Object CallRPC(const string& strMethod, const Array& params)
 
     // Connect to localhost
     bool fUseSSL = GetBoolArg("-rpcssl", false);
-    asio::io_service io_service;
-    ssl::context context(io_service, ssl::context::sslv23);
-    context.set_options(ssl::context::no_sslv2 | ssl::context::no_sslv3);
-    asio::ssl::stream<asio::ip::tcp::socket> sslStream(io_service, context);
-    SSLIOStreamDevice<asio::ip::tcp> d(sslStream, fUseSSL);
-    iostreams::stream< SSLIOStreamDevice<asio::ip::tcp> > stream(d);
+    boost::asio::io_service io_service;
+    boost::asio::ssl::context context(io_service, boost::asio::ssl::context::sslv23);
+    context.set_options(boost::asio::ssl::context::no_sslv2 | boost::asio::ssl::context::no_sslv3);
+    boost::asio::ssl::stream<boost::asio::ip::tcp::socket> sslStream(io_service, context);
+    SSLIOStreamDevice<boost::asio::ip::tcp> d(sslStream, fUseSSL);
+    boost::iostreams::stream< SSLIOStreamDevice<boost::asio::ip::tcp> > stream(d);
 
     const bool fConnected = d.connect(GetArg("-rpcconnect", "127.0.0.1"), GetArg("-rpcport", itostr(BaseParams().RPCPort())));
     if (!fConnected)
@@ -206,7 +204,7 @@ int CommandLineRPC(int argc, char *argv[])
                 // Connection succeeded, no need to retry.
                 break;
             }
-            catch (const CConnectionFailed& e) {
+            catch (const CConnectionFailed&) {
                 if (fWait)
                     MilliSleep(1000);
                 else
@@ -214,10 +212,10 @@ int CommandLineRPC(int argc, char *argv[])
             }
         } while (fWait);
     }
-    catch (boost::thread_interrupted) {
+    catch (const boost::thread_interrupted&) {
         throw;
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
         strPrint = string("error: ") + e.what();
         nRet = EXIT_FAILURE;
     }
@@ -240,7 +238,7 @@ int main(int argc, char* argv[])
         if(!AppInitRPC(argc, argv))
             return EXIT_FAILURE;
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
         PrintExceptionContinue(&e, "AppInitRPC()");
         return EXIT_FAILURE;
     } catch (...) {
@@ -252,7 +250,7 @@ int main(int argc, char* argv[])
     try {
         ret = CommandLineRPC(argc, argv);
     }
-    catch (std::exception& e) {
+    catch (const std::exception& e) {
         PrintExceptionContinue(&e, "CommandLineRPC()");
     } catch (...) {
         PrintExceptionContinue(NULL, "CommandLineRPC()");

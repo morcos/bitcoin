@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "peertablemodel.h"
@@ -115,7 +115,7 @@ PeerTableModel::PeerTableModel(ClientModel *parent) :
     clientModel(parent),
     timer(0)
 {
-    columns << tr("Address/Hostname") << tr("User Agent") << tr("Ping Time");
+    columns << tr("Node/Service") << tr("User Agent") << tr("Ping Time");
     priv = new PeerTablePriv();
     // default to unsorted
     priv->sortColumn = -1;

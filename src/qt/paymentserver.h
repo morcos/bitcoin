@@ -1,4 +1,4 @@
-// Copyright (c) 2011-2014 The Bitcoin developers
+// Copyright (c) 2011-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -91,6 +91,13 @@ public:
     // This is now public, because we use it in paymentservertests.cpp
     static bool readPaymentRequestFromFile(const QString& filename, PaymentRequestPlus& request);
 
+    // Verify that the payment request network matches the client network
+    static bool verifyNetwork(const payments::PaymentDetails& requestDetails);
+    // Verify if the payment request is expired
+    static bool verifyExpired(const payments::PaymentDetails& requestDetails);
+    // Verify the payment request amount is valid
+    static bool verifyAmount(const CAmount& requestAmount);
+
 signals:
     // Fired when a valid payment request is received
     void receivedPaymentRequest(SendCoinsRecipient);
@@ -124,7 +131,7 @@ protected:
     bool eventFilter(QObject *object, QEvent *event);
 
 private:
-    bool processPaymentRequest(PaymentRequestPlus& request, SendCoinsRecipient& recipient);
+    bool processPaymentRequest(const PaymentRequestPlus& request, SendCoinsRecipient& recipient);
     void fetchRequest(const QUrl& url);
 
     // Setup networking

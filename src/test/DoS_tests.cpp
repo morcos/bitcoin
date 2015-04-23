@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2014 The Bitcoin Core developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 //
@@ -15,6 +15,8 @@
 #include "script/sign.h"
 #include "serialize.h"
 #include "util.h"
+
+#include "test/test_bitcoin.h"
 
 #include <stdint.h>
 
@@ -41,7 +43,7 @@ CService ip(uint32_t i)
     return CService(CNetAddr(s), Params().GetDefaultPort());
 }
 
-BOOST_AUTO_TEST_SUITE(DoS_tests)
+BOOST_FIXTURE_TEST_SUITE(DoS_tests, TestingSetup)
 
 BOOST_AUTO_TEST_CASE(DoS_banning)
 {

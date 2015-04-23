@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2009-2014 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #if defined(HAVE_CONFIG_H)
@@ -14,6 +14,7 @@
 #include "clientversion.h"
 #include "primitives/transaction.h"
 #include "ui_interface.h"
+#include "crypto/common.h"
 
 #ifdef WIN32
 #include <string.h>
@@ -49,7 +50,6 @@
 #endif
 #endif
 
-using namespace boost;
 using namespace std;
 
 namespace {
@@ -156,56 +156,6 @@ CAddress GetLocalAddress(const CNetAddr *paddrPeer)
     ret.nServices = nLocalServices;
     ret.nTime = GetAdjustedTime();
     return ret;
-}
-
-bool RecvLine(SOCKET hSocket, string& strLine)
-{
-    strLine = "";
-    while (true)
-    {
-        char c;
-        int nBytes = recv(hSocket, &c, 1, 0);
-        if (nBytes > 0)
-        {
-            if (c == '\n')
-                continue;
-            if (c == '\r')
-                return true;
-            strLine += c;
-            if (strLine.size() >= 9000)
-                return true;
-        }
-        else if (nBytes <= 0)
-        {
-            boost::this_thread::interruption_point();
-            if (nBytes < 0)
-            {
-                int nErr = WSAGetLastError();
-                if (nErr == WSAEMSGSIZE)
-                    continue;
-                if (nErr == WSAEWOULDBLOCK || nErr == WSAEINTR || nErr == WSAEINPROGRESS)
-                {
-                    MilliSleep(10);
-                    continue;
-                }
-            }
-            if (!strLine.empty())
-                return true;
-            if (nBytes == 0)
-            {
-                // socket closed
-                LogPrint("net", "socket closed\n");
-                return false;
-            }
-            else
-            {
-                // socket error
-                int nErr = WSAGetLastError();
-                LogPrint("net", "recv failed: %s\n", NetworkErrorString(nErr));
-                return false;
-            }
-        }
-    }
 }
 
 int GetnScore(const CService& addr)
@@ -445,7 +395,6 @@ void CNode::PushVersion()
 {
     int nBestHeight = g_signals.GetHeight().get_value_or(0);
 
-    /// when NTP implemented, change to just nTime = GetAdjustedTime()
     int64_t nTime = (fInbound ? GetAdjustedTime() : GetTime());
     CAddress addrYou = (addr.IsRoutable() && !IsProxy(addr) ? addr : CAddress(CService("0.0.0.0",0)));
     CAddress addrMe = GetLocalAddress(&addr);
@@ -523,6 +472,7 @@ void CNode::copyStats(CNodeStats &stats)
     X(nLastSend);
     X(nLastRecv);
     X(nTimeConnected);
+    X(nTimeOffset);
     X(addrName);
     X(nVersion);
     X(cleanSubVer);
@@ -560,7 +510,7 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)
         // get current incomplete message, or create a new one
         if (vRecvMsg.empty() ||
             vRecvMsg.back().complete())
-            vRecvMsg.push_back(CNetMessage(SER_NETWORK, nRecvVersion));
+            vRecvMsg.push_back(CNetMessage(Params().MessageStart(), SER_NETWORK, nRecvVersion));
 
         CNetMessage& msg = vRecvMsg.back();
 
@@ -573,6 +523,11 @@ bool CNode::ReceiveMsgBytes(const char *pch, unsigned int nBytes)
 
         if (handled < 0)
                 return false;
+
+        if (msg.in_data && msg.hdr.nMessageSize > MAX_PROTOCOL_MESSAGE_LENGTH) {
+            LogPrint("net", "Oversized message from peer=%i, disconnecting", GetId());
+            return false;
+        }
 
         pch += handled;
         nBytes -= handled;
@@ -601,7 +556,7 @@ int CNetMessage::readHeader(const char *pch, unsigned int nBytes)
     try {
         hdrbuf >> hdr;
     }
-    catch (const std::exception &) {
+    catch (const std::exception&) {
         return -1;
     }
 
@@ -1068,10 +1023,10 @@ void ThreadMapPort()
                 MilliSleep(20*60*1000); // Refresh every 20 minutes
             }
         }
-        catch (boost::thread_interrupted)
+        catch (const boost::thread_interrupted&)
         {
             r = UPNP_DeletePortMapping(urls.controlURL, data.first.servicetype, port.c_str(), "TCP", 0);
-            LogPrintf("UPNP_DeletePortMapping() returned : %d\n", r);
+            LogPrintf("UPNP_DeletePortMapping() returned: %d\n", r);
             freeUPNPDevlist(devlist); devlist = 0;
             FreeUPNPUrls(&urls);
             throw;
@@ -1266,8 +1221,7 @@ void ThreadOpenConnections()
         int nTries = 0;
         while (true)
         {
-            // use an nUnkBias between 10 (no outgoing connections) and 90 (8 outgoing connections)
-            CAddress addr = addrman.Select(10 + min(nOutbound,8)*10);
+            CAddress addr = addrman.Select();
 
             // if we selected an invalid address, restart
             if (!addr.IsValid() || setConnected.count(addr.GetGroup()) || IsLocal(addr))
@@ -1451,7 +1405,7 @@ void ThreadMessageHandler()
             {
                 TRY_LOCK(pnode->cs_vSend, lockSend);
                 if (lockSend)
-                    g_signals.SendMessages(pnode, pnode == pnodeTrickle);
+                    g_signals.SendMessages(pnode, pnode == pnodeTrickle || pnode->fWhitelisted);
             }
             boost::this_thread::interruption_point();
         }
@@ -1848,21 +1802,21 @@ bool CAddrDB::Write(const CAddrMan& addr)
     FILE *file = fopen(pathTmp.string().c_str(), "wb");
     CAutoFile fileout(file, SER_DISK, CLIENT_VERSION);
     if (fileout.IsNull())
-        return error("%s : Failed to open file %s", __func__, pathTmp.string());
+        return error("%s: Failed to open file %s", __func__, pathTmp.string());
 
     // Write and commit header, data
     try {
         fileout << ssPeers;
     }
-    catch (std::exception &e) {
-        return error("%s : Serialize or I/O error - %s", __func__, e.what());
+    catch (const std::exception& e) {
+        return error("%s: Serialize or I/O error - %s", __func__, e.what());
     }
     FileCommit(fileout.Get());
     fileout.fclose();
 
     // replace existing peers.dat, if any, with new peers.dat.XXXX
     if (!RenameOver(pathTmp, pathAddr))
-        return error("%s : Rename-into-place failed", __func__);
+        return error("%s: Rename-into-place failed", __func__);
 
     return true;
 }
@@ -1873,7 +1827,7 @@ bool CAddrDB::Read(CAddrMan& addr)
     FILE *file = fopen(pathAddr.string().c_str(), "rb");
     CAutoFile filein(file, SER_DISK, CLIENT_VERSION);
     if (filein.IsNull())
-        return error("%s : Failed to open file %s", __func__, pathAddr.string());
+        return error("%s: Failed to open file %s", __func__, pathAddr.string());
 
     // use file size to size memory buffer
     int fileSize = boost::filesystem::file_size(pathAddr);
@@ -1890,8 +1844,8 @@ bool CAddrDB::Read(CAddrMan& addr)
         filein.read((char *)&vchData[0], dataSize);
         filein >> hashIn;
     }
-    catch (std::exception &e) {
-        return error("%s : Deserialize or I/O error - %s", __func__, e.what());
+    catch (const std::exception& e) {
+        return error("%s: Deserialize or I/O error - %s", __func__, e.what());
     }
     filein.fclose();
 
@@ -1900,7 +1854,7 @@ bool CAddrDB::Read(CAddrMan& addr)
     // verify stored checksum matches input data
     uint256 hashTmp = Hash(ssPeers.begin(), ssPeers.end());
     if (hashIn != hashTmp)
-        return error("%s : Checksum mismatch, data corrupted", __func__);
+        return error("%s: Checksum mismatch, data corrupted", __func__);
 
     unsigned char pchMsgTmp[4];
     try {
@@ -1909,13 +1863,13 @@ bool CAddrDB::Read(CAddrMan& addr)
 
         // ... verify the network matches ours
         if (memcmp(pchMsgTmp, Params().MessageStart(), sizeof(pchMsgTmp)))
-            return error("%s : Invalid network magic number", __func__);
+            return error("%s: Invalid network magic number", __func__);
 
         // de-serialize address data into one CAddrMan object
         ssPeers >> addr;
     }
-    catch (std::exception &e) {
-        return error("%s : Deserialize or I/O error - %s", __func__, e.what());
+    catch (const std::exception& e) {
+        return error("%s: Deserialize or I/O error - %s", __func__, e.what());
     }
 
     return true;
@@ -1934,6 +1888,7 @@ CNode::CNode(SOCKET hSocketIn, CAddress addrIn, std::string addrNameIn, bool fIn
     nSendBytes = 0;
     nRecvBytes = 0;
     nTimeConnected = GetTime();
+    nTimeOffset = 0;
     addr = addrIn;
     addrName = addrNameIn == "" ? addr.ToStringIPPort() : addrNameIn;
     nVersion = 0;
@@ -1948,7 +1903,7 @@ CNode::CNode(SOCKET hSocketIn, CAddress addrIn, std::string addrNameIn, bool fIn
     nRefCount = 0;
     nSendSize = 0;
     nSendOffset = 0;
-    hashContinue = 0;
+    hashContinue = uint256();
     nStartingHeight = -1;
     fGetAddr = false;
     fRelayTxes = false;
@@ -2020,8 +1975,8 @@ void CNode::BeginMessage(const char* pszCommand) EXCLUSIVE_LOCK_FUNCTION(cs_vSen
 {
     ENTER_CRITICAL_SECTION(cs_vSend);
     assert(ssSend.size() == 0);
-    ssSend << CMessageHeader(pszCommand, 0);
-    LogPrint("net", "sending: %s ", pszCommand);
+    ssSend << CMessageHeader(Params().MessageStart(), pszCommand, 0);
+    LogPrint("net", "sending: %s ", SanitizeString(pszCommand));
 }
 
 void CNode::AbortMessage() UNLOCK_FUNCTION(cs_vSend)
@@ -2052,7 +2007,7 @@ void CNode::EndMessage() UNLOCK_FUNCTION(cs_vSend)
 
     // Set the size
     unsigned int nSize = ssSend.size() - CMessageHeader::HEADER_SIZE;
-    memcpy((char*)&ssSend[CMessageHeader::MESSAGE_SIZE_OFFSET], &nSize, sizeof(nSize));
+    WriteLE32((uint8_t*)&ssSend[CMessageHeader::MESSAGE_SIZE_OFFSET], nSize);
 
     // Set the checksum
     uint256 hash = Hash(ssSend.begin() + CMessageHeader::HEADER_SIZE, ssSend.end());

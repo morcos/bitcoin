@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -346,7 +346,22 @@ bool SoftSetBoolArg(const std::string& strArg, bool fValue)
         return SoftSetArg(strArg, std::string("0"));
 }
 
-static std::string FormatException(std::exception* pex, const char* pszThread)
+static const int screenWidth = 79;
+static const int optIndent = 2;
+static const int msgIndent = 7;
+
+std::string HelpMessageGroup(const std::string &message) {
+    return std::string(message) + std::string("\n\n");
+}
+
+std::string HelpMessageOpt(const std::string &option, const std::string &message) {
+    return std::string(optIndent,' ') + std::string(option) +
+           std::string("\n") + std::string(msgIndent,' ') +
+           FormatParagraph(message, screenWidth - msgIndent, msgIndent) +
+           std::string("\n\n");
+}
+
+static std::string FormatException(const std::exception* pex, const char* pszThread)
 {
 #ifdef WIN32
     char pszModule[MAX_PATH] = "";
@@ -362,7 +377,7 @@ static std::string FormatException(std::exception* pex, const char* pszThread)
             "UNKNOWN EXCEPTION       \n%s in %s       \n", pszModule, pszThread);
 }
 
-void PrintExceptionContinue(std::exception* pex, const char* pszThread)
+void PrintExceptionContinue(const std::exception* pex, const char* pszThread)
 {
     std::string message = FormatException(pex, pszThread);
     LogPrintf("\n\n************************\n%s\n", message);
@@ -514,7 +529,7 @@ bool TryCreateDirectory(const boost::filesystem::path& p)
     try
     {
         return boost::filesystem::create_directory(p);
-    } catch (boost::filesystem::filesystem_error) {
+    } catch (const boost::filesystem::filesystem_error&) {
         if (!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
             throw;
     }
@@ -698,13 +713,8 @@ void RenameThread(const char* name)
     //       removed.
     pthread_set_name_np(pthread_self(), name);
 
-#elif defined(MAC_OSX) && defined(__MAC_OS_X_VERSION_MAX_ALLOWED)
-
-// pthread_setname_np is XCode 10.6-and-later
-#if __MAC_OS_X_VERSION_MAX_ALLOWED >= 1060
+#elif defined(MAC_OSX)
     pthread_setname_np(name);
-#endif
-
 #else
     // Prevent warnings for unused parameters...
     (void)name;
@@ -713,19 +723,19 @@ void RenameThread(const char* name)
 
 void SetupEnvironment()
 {
-#ifndef WIN32
-    try
-    {
-#if BOOST_FILESYSTEM_VERSION == 3
-            boost::filesystem::path::codecvt(); // Raises runtime error if current locale is invalid
-#else // boost filesystem v2
-            std::locale();                      // Raises runtime error if current locale is invalid
-#endif
-    } catch(std::runtime_error &e)
-    {
-        setenv("LC_ALL", "C", 1); // Force C locale
+    std::locale loc("C");
+    // On most POSIX systems (e.g. Linux, but not BSD) the environment's locale
+    // may be invalid, in which case the "C" locale is used as fallback.
+#if !defined(WIN32) && !defined(MAC_OSX) && !defined(__FreeBSD__) && !defined(__OpenBSD__)
+    try {
+        loc = std::locale(""); // Raises a runtime error if current locale is invalid
+    } catch (const std::runtime_error&) {
+        setenv("LC_ALL", "C", 1);
     }
 #endif
+    // The path locale is lazy initialized and to avoid deinitialization errors 
+    // in multithreading environments, it is set explicitly by the main thread.
+    boost::filesystem::path::imbue(loc);
 }
 
 void SetThreadPriority(int nPriority)

@@ -1,9 +1,10 @@
 // Copyright (c) 2011-2014 The Bitcoin Core developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "data/tx_invalid.json.h"
 #include "data/tx_valid.json.h"
+#include "test/test_bitcoin.h"
 
 #include "clientversion.h"
 #include "key.h"
@@ -24,7 +25,6 @@
 
 using namespace std;
 using namespace json_spirit;
-using namespace boost::algorithm;
 
 // In script_tests.cpp
 extern Array read_json(const std::string& jsondata);
@@ -38,7 +38,8 @@ static std::map<string, unsigned int> mapFlagNames = boost::assign::map_list_of
     (string("SIGPUSHONLY"), (unsigned int)SCRIPT_VERIFY_SIGPUSHONLY)
     (string("MINIMALDATA"), (unsigned int)SCRIPT_VERIFY_MINIMALDATA)
     (string("NULLDUMMY"), (unsigned int)SCRIPT_VERIFY_NULLDUMMY)
-    (string("DISCOURAGE_UPGRADABLE_NOPS"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS);
+    (string("DISCOURAGE_UPGRADABLE_NOPS"), (unsigned int)SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS)
+    (string("CLEANSTACK"), (unsigned int)SCRIPT_VERIFY_CLEANSTACK);
 
 unsigned int ParseScriptFlags(string strFlags)
 {
@@ -47,7 +48,7 @@ unsigned int ParseScriptFlags(string strFlags)
     }
     unsigned int flags = 0;
     vector<string> words;
-    split(words, strFlags, is_any_of(","));
+    boost::algorithm::split(words, strFlags, boost::algorithm::is_any_of(","));
 
     BOOST_FOREACH(string word, words)
     {
@@ -75,7 +76,7 @@ string FormatScriptFlags(unsigned int flags)
     return ret.substr(0, ret.size() - 1);
 }
 
-BOOST_AUTO_TEST_SUITE(transaction_tests)
+BOOST_FIXTURE_TEST_SUITE(transaction_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(tx_valid)
 {
@@ -118,7 +119,7 @@ BOOST_AUTO_TEST_CASE(tx_valid)
                     break;
                 }
 
-                mapprevOutScriptPubKeys[COutPoint(uint256(vinput[0].get_str()), vinput[1].get_int())] = ParseScript(vinput[2].get_str());
+                mapprevOutScriptPubKeys[COutPoint(uint256S(vinput[0].get_str()), vinput[1].get_int())] = ParseScript(vinput[2].get_str());
             }
             if (!fValid)
             {
@@ -145,7 +146,7 @@ BOOST_AUTO_TEST_CASE(tx_valid)
 
                 unsigned int verify_flags = ParseScriptFlags(test[2].get_str());
                 BOOST_CHECK_MESSAGE(VerifyScript(tx.vin[i].scriptSig, mapprevOutScriptPubKeys[tx.vin[i].prevout],
-                                                 verify_flags, SignatureChecker(tx, i), &err),
+                                                 verify_flags, TransactionSignatureChecker(&tx, i), &err),
                                     strTest);
                 BOOST_CHECK_MESSAGE(err == SCRIPT_ERR_OK, ScriptErrorString(err));
             }
@@ -194,7 +195,7 @@ BOOST_AUTO_TEST_CASE(tx_invalid)
                     break;
                 }
 
-                mapprevOutScriptPubKeys[COutPoint(uint256(vinput[0].get_str()), vinput[1].get_int())] = ParseScript(vinput[2].get_str());
+                mapprevOutScriptPubKeys[COutPoint(uint256S(vinput[0].get_str()), vinput[1].get_int())] = ParseScript(vinput[2].get_str());
             }
             if (!fValid)
             {
@@ -220,7 +221,7 @@ BOOST_AUTO_TEST_CASE(tx_invalid)
 
                 unsigned int verify_flags = ParseScriptFlags(test[2].get_str());
                 fValid = VerifyScript(tx.vin[i].scriptSig, mapprevOutScriptPubKeys[tx.vin[i].prevout],
-                                      verify_flags, SignatureChecker(tx, i), &err);
+                                      verify_flags, TransactionSignatureChecker(&tx, i), &err);
             }
             BOOST_CHECK_MESSAGE(!fValid, strTest);
             BOOST_CHECK_MESSAGE(err != SCRIPT_ERR_OK, ScriptErrorString(err));
@@ -347,12 +348,12 @@ BOOST_AUTO_TEST_CASE(test_IsStandard)
     t.vout[0].scriptPubKey = CScript() << OP_1;
     BOOST_CHECK(!IsStandardTx(t, reason));
 
-    // 40-byte TX_NULL_DATA (standard)
-    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38");
+    // 80-byte TX_NULL_DATA (standard)
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef38");
     BOOST_CHECK(IsStandardTx(t, reason));
 
-    // 41-byte TX_NULL_DATA (non-standard)
-    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3800");
+    // 81-byte TX_NULL_DATA (non-standard)
+    t.vout[0].scriptPubKey = CScript() << OP_RETURN << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3804678afdb0fe5548271967f1a67130b7105cd6a828e03909a67962e0ea1f61deb649f6bc3f4cef3800");
     BOOST_CHECK(!IsStandardTx(t, reason));
 
     // TX_NULL_DATA w/o PUSHDATA

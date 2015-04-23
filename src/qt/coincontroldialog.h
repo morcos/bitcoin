@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2013 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2013 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #ifndef BITCOIN_QT_COINCONTROLDIALOG_H
@@ -25,6 +25,8 @@ namespace Ui {
     class CoinControlDialog;
 }
 
+#define ASYMP_UTF8 "\xE2\x89\x88"
+
 class CoinControlDialog : public QDialog
 {
     Q_OBJECT
@@ -41,6 +43,7 @@ public:
 
     static QList<CAmount> payAmounts;
     static CCoinControl *coinControl;
+    static bool fSubtractFeeFromAmount;
 
 private:
     Ui::CoinControlDialog *ui;

@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,7 +17,6 @@
 #include "primitives/block.h"
 #include "primitives/transaction.h"
 #include "net.h"
-#include "pow.h"
 #include "script/script.h"
 #include "script/sigcache.h"
 #include "script/standard.h"
@@ -25,7 +24,6 @@
 #include "tinyformat.h"
 #include "txmempool.h"
 #include "uint256.h"
-#include "undo.h"
 
 #include <algorithm>
 #include <exception>
@@ -46,7 +44,6 @@ class CScriptCheck;
 class CValidationInterface;
 class CValidationState;
 
-struct CBlockTemplate;
 struct CNodeStateStats;
 
 /** Default for -blockmaxsize and -blockminsize, which control the range of sizes the mining code will create **/
@@ -61,11 +58,9 @@ static const unsigned int MAX_BLOCK_SIGOPS = MAX_BLOCK_SIZE/50;
 /** Maximum number of signature check operations in an IsStandard() P2SH script */
 static const unsigned int MAX_P2SH_SIGOPS = 15;
 /** The maximum number of sigops we're willing to relay/mine in a single tx */
-static const unsigned int MAX_TX_SIGOPS = MAX_BLOCK_SIGOPS/5;
+static const unsigned int MAX_STANDARD_TX_SIGOPS = MAX_BLOCK_SIGOPS/5;
 /** Default for -maxorphantx, maximum number of orphan transactions kept in memory */
 static const unsigned int DEFAULT_MAX_ORPHAN_TRANSACTIONS = 100;
-/** Default for -maxorphanblocks, maximum number of orphan blocks kept in memory */
-static const unsigned int DEFAULT_MAX_ORPHAN_BLOCKS = 750;
 /** The maximum size of a blk?????.dat file (since 0.8) */
 static const unsigned int MAX_BLOCKFILE_SIZE = 0x8000000; // 128 MiB
 /** The pre-allocation chunk size for blk?????.dat files (since 0.8) */
@@ -109,7 +104,7 @@ static const unsigned char REJECT_CHECKPOINT = 0x43;
 
 struct BlockHasher
 {
-    size_t operator()(const uint256& hash) const { return hash.GetLow64(); }
+    size_t operator()(const uint256& hash) const { return hash.GetCheapHash(); }
 };
 
 extern CScript COINBASE_FLAGS;
@@ -120,7 +115,6 @@ extern BlockMap mapBlockIndex;
 extern uint64_t nLastBlockTx;
 extern uint64_t nLastBlockSize;
 extern const std::string strMessageMagic;
-extern int64_t nTimeBestReceived;
 extern CWaitableCriticalSection csBestBlock;
 extern CConditionVariable cvBlockChange;
 extern bool fImporting;
@@ -128,6 +122,7 @@ extern bool fReindex;
 extern int nScriptCheckThreads;
 extern bool fTxIndex;
 extern bool fIsBareMultisigStd;
+extern bool fCheckBlockIndex;
 extern unsigned int nCoinCacheSize;
 extern CFeeRate minRelayTxFee;
 
@@ -136,15 +131,6 @@ extern CBlockIndex *pindexBestHeader;
 
 /** Minimum disk space required - used in CheckDiskSpace() */
 static const uint64_t nMinDiskSpace = 52428800;
-
-/** Register a wallet to receive updates from core */
-void RegisterValidationInterface(CValidationInterface* pwalletIn);
-/** Unregister a wallet from core */
-void UnregisterValidationInterface(CValidationInterface* pwalletIn);
-/** Unregister all wallets from core */
-void UnregisterAllValidationInterfaces();
-/** Push an updated transaction to all registered wallets */
-void SyncWithWallets(const CTransaction& tx, const CBlock* pblock = NULL);
 
 /** Register with a network node to receive its signals */
 void RegisterNodeSignals(CNodeSignals& nodeSignals);
@@ -156,7 +142,7 @@ void UnregisterNodeSignals(CNodeSignals& nodeSignals);
  * block is made active. Note that it does not, however, guarantee that the
  * specific block passed to it has been checked for validity!
  * 
- * @param[out]  state   This may be set to an Error state if any error occurred processing it, including during validation/connection/etc of otherwise unrelated blocks during reorganisation; or it may be set to an Invalid state if pblock is itself invalid (but this is not guaranteed even when the block is checked). If you want to *possibly* get feedback on whether pblock is valid, you must also install a CValidationInterface - this will have its BlockChecked method called whenever *any* block completes validation.
+ * @param[out]  state   This may be set to an Error state if any error occurred processing it, including during validation/connection/etc of otherwise unrelated blocks during reorganisation; or it may be set to an Invalid state if pblock is itself invalid (but this is not guaranteed even when the block is checked). If you want to *possibly* get feedback on whether pblock is valid, you must also install a CValidationInterface (see validationinterface.h) - this will have its BlockChecked method called whenever *any* block completes validation.
  * @param[in]   pfrom   The node which we are receiving the block from; it is added to mapBlockSource and may be penalised if the block is invalid.
  * @param[in]   pblock  The block we want to process.
  * @param[out]  dbp     If pblock is stored to disk (or already there), this will be set to its location.
@@ -181,7 +167,12 @@ bool LoadBlockIndex();
 void UnloadBlockIndex();
 /** Process protocol messages received from a given node */
 bool ProcessMessages(CNode* pfrom);
-/** Send queued protocol messages to be sent to a give node */
+/**
+ * Send queued protocol messages to be sent to a give node.
+ *
+ * @param[in]   pto             The node which we are sending messages to.
+ * @param[in]   fSendTrickle    When true send the trickled data, otherwise trickle the data until true.
+ */
 bool SendMessages(CNode* pto, bool fSendTrickle);
 /** Run an instance of the script checking thread */
 void ThreadScriptCheck();
@@ -209,7 +200,7 @@ void FlushStateToDisk();
 
 /** (try to) add transaction to memory pool **/
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransaction &tx, bool fLimitFree,
-                        bool* pfMissingInputs, bool fRejectInsaneFee=false);
+                        bool* pfMissingInputs, bool fRejectAbsurdFee=false);
 
 
 struct CNodeStateStats {
@@ -292,7 +283,7 @@ bool CheckInputs(const CTransaction& tx, CValidationState &state, const CCoinsVi
                  unsigned int flags, bool cacheStore, std::vector<CScriptCheck> *pvChecks = NULL);
 
 /** Apply the effects of this transaction on the UTXO set represented by view */
-void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, CTxUndo &txundo, int nHeight);
+void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCache &inputs, int nHeight);
 
 /** Context-independent validity checks */
 bool CheckTransaction(const CTransaction& tx, CValidationState& state);
@@ -303,24 +294,6 @@ bool CheckTransaction(const CTransaction& tx, CValidationState& state);
 bool IsStandardTx(const CTransaction& tx, std::string& reason);
 
 bool IsFinalTx(const CTransaction &tx, int nBlockHeight = 0, int64_t nBlockTime = 0);
-
-/** Undo information for a CBlock */
-class CBlockUndo
-{
-public:
-    std::vector<CTxUndo> vtxundo; // for all but the coinbase
-
-    ADD_SERIALIZE_METHODS;
-
-    template <typename Stream, typename Operation>
-    inline void SerializationOp(Stream& s, Operation ser_action, int nType, int nVersion) {
-        READWRITE(vtxundo);
-    }
-
-    bool WriteToDisk(CDiskBlockPos &pos, const uint256 &hashBlock);
-    bool ReadFromDisk(const CDiskBlockPos &pos, const uint256 &hashBlock);
-};
-
 
 /** 
  * Closure representing one script verification
@@ -533,31 +506,5 @@ extern CCoinsViewCache *pcoinsTip;
 
 /** Global variable that points to the active block tree (protected by cs_main) */
 extern CBlockTreeDB *pblocktree;
-
-struct CBlockTemplate
-{
-    CBlock block;
-    std::vector<CAmount> vTxFees;
-    std::vector<int64_t> vTxSigOps;
-};
-
-
-
-
-
-
-class CValidationInterface {
-protected:
-    virtual void SyncTransaction(const CTransaction &tx, const CBlock *pblock) {};
-    virtual void EraseFromWallet(const uint256 &hash) {};
-    virtual void SetBestChain(const CBlockLocator &locator) {};
-    virtual void UpdatedTransaction(const uint256 &hash) {};
-    virtual void Inventory(const uint256 &hash) {};
-    virtual void ResendWalletTransactions() {};
-    virtual void BlockChecked(const CBlock&, const CValidationState&) {};
-    friend void ::RegisterValidationInterface(CValidationInterface*);
-    friend void ::UnregisterValidationInterface(CValidationInterface*);
-    friend void ::UnregisterAllValidationInterfaces();
-};
 
 #endif // BITCOIN_MAIN_H

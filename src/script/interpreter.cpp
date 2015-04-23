@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -60,7 +60,7 @@ bool CastToBool(const valtype& vch)
 static inline void popstack(vector<valtype>& stack)
 {
     if (stack.empty())
-        throw runtime_error("popstack() : stack empty");
+        throw runtime_error("popstack(): stack empty");
     stack.pop_back();
 }
 
@@ -93,76 +93,76 @@ bool static IsCompressedOrUncompressedPubKey(const valtype &vchPubKey) {
  * in which case a single 0 byte is necessary and even required).
  * 
  * See https://bitcointalk.org/index.php?topic=8392.msg127623#msg127623
+ *
+ * This function is consensus-critical since BIP66.
  */
-bool static IsDERSignature(const valtype &vchSig) {
+bool static IsValidSignatureEncoding(const std::vector<unsigned char> &sig) {
+    // Format: 0x30 [total-length] 0x02 [R-length] [R] 0x02 [S-length] [S] [sighash]
+    // * total-length: 1-byte length descriptor of everything that follows,
+    //   excluding the sighash byte.
+    // * R-length: 1-byte length descriptor of the R value that follows.
+    // * R: arbitrary-length big-endian encoded R value. It must use the shortest
+    //   possible encoding for a positive integers (which means no null bytes at
+    //   the start, except a single one when the next byte has its highest bit set).
+    // * S-length: 1-byte length descriptor of the S value that follows.
+    // * S: arbitrary-length big-endian encoded S value. The same rules apply.
+    // * sighash: 1-byte value indicating what data is hashed (not part of the DER
+    //   signature)
 
-    if (vchSig.size() < 9) {
-        //  Non-canonical signature: too short
-        return false;
-    }
-    if (vchSig.size() > 73) {
-        // Non-canonical signature: too long
-        return false;
-    }
-    if (vchSig[0] != 0x30) {
-        //  Non-canonical signature: wrong type
-        return false;
-    }
-    if (vchSig[1] != vchSig.size()-3) {
-        //  Non-canonical signature: wrong length marker
-        return false;
-    }
-    unsigned int nLenR = vchSig[3];
-    if (5 + nLenR >= vchSig.size()) {
-        //  Non-canonical signature: S length misplaced
-        return false;
-    }
-    unsigned int nLenS = vchSig[5+nLenR];
-    if ((unsigned long)(nLenR+nLenS+7) != vchSig.size()) {
-        //  Non-canonical signature: R+S length mismatch
-        return false;
-    }
+    // Minimum and maximum size constraints.
+    if (sig.size() < 9) return false;
+    if (sig.size() > 73) return false;
 
-    const unsigned char *R = &vchSig[4];
-    if (R[-2] != 0x02) {
-        //  Non-canonical signature: R value type mismatch
-        return false;
-    }
-    if (nLenR == 0) {
-        //  Non-canonical signature: R length is zero
-        return false;
-    }
-    if (R[0] & 0x80) {
-        //  Non-canonical signature: R value negative
-        return false;
-    }
-    if (nLenR > 1 && (R[0] == 0x00) && !(R[1] & 0x80)) {
-        //  Non-canonical signature: R value excessively padded
-        return false;
-    }
+    // A signature is of type 0x30 (compound).
+    if (sig[0] != 0x30) return false;
 
-    const unsigned char *S = &vchSig[6+nLenR];
-    if (S[-2] != 0x02) {
-        //  Non-canonical signature: S value type mismatch
-        return false;
-    }
-    if (nLenS == 0) {
-        //  Non-canonical signature: S length is zero
-        return false;
-    }
-    if (S[0] & 0x80) {
-        //  Non-canonical signature: S value negative
-        return false;
-    }
-    if (nLenS > 1 && (S[0] == 0x00) && !(S[1] & 0x80)) {
-        //  Non-canonical signature: S value excessively padded
-        return false;
-    }
+    // Make sure the length covers the entire signature.
+    if (sig[1] != sig.size() - 3) return false;
+
+    // Extract the length of the R element.
+    unsigned int lenR = sig[3];
+
+    // Make sure the length of the S element is still inside the signature.
+    if (5 + lenR >= sig.size()) return false;
+
+    // Extract the length of the S element.
+    unsigned int lenS = sig[5 + lenR];
+
+    // Verify that the length of the signature matches the sum of the length
+    // of the elements.
+    if ((size_t)(lenR + lenS + 7) != sig.size()) return false;
+ 
+    // Check whether the R element is an integer.
+    if (sig[2] != 0x02) return false;
+
+    // Zero-length integers are not allowed for R.
+    if (lenR == 0) return false;
+
+    // Negative numbers are not allowed for R.
+    if (sig[4] & 0x80) return false;
+
+    // Null bytes at the start of R are not allowed, unless R would
+    // otherwise be interpreted as a negative number.
+    if (lenR > 1 && (sig[4] == 0x00) && !(sig[5] & 0x80)) return false;
+
+    // Check whether the S element is an integer.
+    if (sig[lenR + 4] != 0x02) return false;
+
+    // Zero-length integers are not allowed for S.
+    if (lenS == 0) return false;
+
+    // Negative numbers are not allowed for S.
+    if (sig[lenR + 6] & 0x80) return false;
+
+    // Null bytes at the start of S are not allowed, unless S would otherwise be
+    // interpreted as a negative number.
+    if (lenS > 1 && (sig[lenR + 6] == 0x00) && !(sig[lenR + 7] & 0x80)) return false;
+
     return true;
 }
 
 bool static IsLowDERSignature(const valtype &vchSig, ScriptError* serror) {
-    if (!IsDERSignature(vchSig)) {
+    if (!IsValidSignatureEncoding(vchSig)) {
         return set_error(serror, SCRIPT_ERR_SIG_DER);
     }
     unsigned int nLenR = vchSig[3];
@@ -189,7 +189,12 @@ bool static IsDefinedHashtypeSignature(const valtype &vchSig) {
 }
 
 bool static CheckSignatureEncoding(const valtype &vchSig, unsigned int flags, ScriptError* serror) {
-    if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !IsDERSignature(vchSig)) {
+    // Empty signature. Not strictly DER encoded, but allowed to provide a
+    // compact way to provide an invalid signature for use with CHECK(MULTI)SIG
+    if (vchSig.size() == 0) {
+        return true;
+    }
+    if ((flags & (SCRIPT_VERIFY_DERSIG | SCRIPT_VERIFY_LOW_S | SCRIPT_VERIFY_STRICTENC)) != 0 && !IsValidSignatureEncoding(vchSig)) {
         return set_error(serror, SCRIPT_ERR_SIG_DER);
     } else if ((flags & SCRIPT_VERIFY_LOW_S) != 0 && !IsLowDERSignature(vchSig, serror)) {
         // serror is set
@@ -1030,16 +1035,17 @@ public:
 
 uint256 SignatureHash(const CScript& scriptCode, const CTransaction& txTo, unsigned int nIn, int nHashType)
 {
+    static const uint256 one(uint256S("0000000000000000000000000000000000000000000000000000000000000001"));
     if (nIn >= txTo.vin.size()) {
         //  nIn out of range
-        return 1;
+        return one;
     }
 
     // Check for invalid use of SIGHASH_SINGLE
     if ((nHashType & 0x1f) == SIGHASH_SINGLE) {
         if (nIn >= txTo.vout.size()) {
             //  nOut out of range
-            return 1;
+            return one;
         }
     }
 
@@ -1052,12 +1058,12 @@ uint256 SignatureHash(const CScript& scriptCode, const CTransaction& txTo, unsig
     return ss.GetHash();
 }
 
-bool SignatureChecker::VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
+bool TransactionSignatureChecker::VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& pubkey, const uint256& sighash) const
 {
     return pubkey.Verify(sighash, vchSig);
 }
 
-bool SignatureChecker::CheckSig(const vector<unsigned char>& vchSigIn, const vector<unsigned char>& vchPubKey, const CScript& scriptCode) const
+bool TransactionSignatureChecker::CheckSig(const vector<unsigned char>& vchSigIn, const vector<unsigned char>& vchPubKey, const CScript& scriptCode) const
 {
     CPubKey pubkey(vchPubKey);
     if (!pubkey.IsValid())
@@ -1070,7 +1076,7 @@ bool SignatureChecker::CheckSig(const vector<unsigned char>& vchSigIn, const vec
     int nHashType = vchSig.back();
     vchSig.pop_back();
 
-    uint256 sighash = SignatureHash(scriptCode, txTo, nIn, nHashType);
+    uint256 sighash = SignatureHash(scriptCode, *txTo, nIn, nHashType);
 
     if (!VerifySignature(vchSig, pubkey, sighash))
         return false;
@@ -1097,7 +1103,6 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, unsigne
         return false;
     if (stack.empty())
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
-
     if (CastToBool(stack.back()) == false)
         return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
 
@@ -1108,24 +1113,37 @@ bool VerifyScript(const CScript& scriptSig, const CScript& scriptPubKey, unsigne
         if (!scriptSig.IsPushOnly())
             return set_error(serror, SCRIPT_ERR_SIG_PUSHONLY);
 
-        // stackCopy cannot be empty here, because if it was the
+        // Restore stack.
+        swap(stack, stackCopy);
+
+        // stack cannot be empty here, because if it was the
         // P2SH  HASH <> EQUAL  scriptPubKey would be evaluated with
         // an empty stack and the EvalScript above would return false.
-        assert(!stackCopy.empty());
+        assert(!stack.empty());
 
-        const valtype& pubKeySerialized = stackCopy.back();
+        const valtype& pubKeySerialized = stack.back();
         CScript pubKey2(pubKeySerialized.begin(), pubKeySerialized.end());
-        popstack(stackCopy);
+        popstack(stack);
 
-        if (!EvalScript(stackCopy, pubKey2, flags, checker, serror))
+        if (!EvalScript(stack, pubKey2, flags, checker, serror))
             // serror is set
             return false;
-        if (stackCopy.empty())
+        if (stack.empty())
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
-        if (!CastToBool(stackCopy.back()))
+        if (!CastToBool(stack.back()))
             return set_error(serror, SCRIPT_ERR_EVAL_FALSE);
-        else
-            return set_success(serror);
+    }
+
+    // The CLEANSTACK check is only performed after potential P2SH evaluation,
+    // as the non-P2SH evaluation of a P2SH script will obviously not result in
+    // a clean stack (the P2SH inputs remain).
+    if ((flags & SCRIPT_VERIFY_CLEANSTACK) != 0) {
+        // Disallow CLEANSTACK without P2SH, as otherwise a switch CLEANSTACK->P2SH+CLEANSTACK
+        // would be possible, which is not a softfork (and P2SH should be one).
+        assert((flags & SCRIPT_VERIFY_P2SH) != 0);
+        if (stack.size() != 1) {
+            return set_error(serror, SCRIPT_ERR_CLEANSTACK);
+        }
     }
 
     return set_success(serror);

@@ -1,5 +1,5 @@
-// Copyright (c) 2011-2014 The Bitcoin developers
-// Distributed under the MIT/X11 software license, see the accompanying
+// Copyright (c) 2011-2014 The Bitcoin Core developers
+// Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "sendcoinsdialog.h"
@@ -11,13 +11,15 @@
 #include "coincontroldialog.h"
 #include "guiutil.h"
 #include "optionsmodel.h"
+#include "scicon.h"
 #include "sendcoinsentry.h"
 #include "walletmodel.h"
 
 #include "base58.h"
 #include "coincontrol.h"
+#include "main.h"
 #include "ui_interface.h"
-#include "wallet.h"
+#include "wallet/wallet.h"
 
 #include <QMessageBox>
 #include <QScrollBar>
@@ -38,6 +40,10 @@ SendCoinsDialog::SendCoinsDialog(QWidget *parent) :
     ui->addButton->setIcon(QIcon());
     ui->clearButton->setIcon(QIcon());
     ui->sendButton->setIcon(QIcon());
+#else
+    ui->addButton->setIcon(SingleColorIcon(":/icons/add"));
+    ui->clearButton->setIcon(SingleColorIcon(":/icons/remove"));
+    ui->sendButton->setIcon(SingleColorIcon(":/icons/send"));
 #endif
 
     GUIUtil::setupAddressWidget(ui->lineEditCoinControlChange, this);
@@ -116,7 +122,7 @@ void SendCoinsDialog::setClientModel(ClientModel *clientModel)
     this->clientModel = clientModel;
 
     if (clientModel) {
-        connect(clientModel, SIGNAL(numBlocksChanged(int)), this, SLOT(updateSmartFeeLabel()));
+        connect(clientModel, SIGNAL(numBlocksChanged(int,QDateTime)), this, SLOT(updateSmartFeeLabel()));
     }
 }
 
@@ -215,46 +221,7 @@ void SendCoinsDialog::on_sendButton_clicked()
         return;
     }
 
-    // Format confirmation message
-    QStringList formatted;
-    foreach(const SendCoinsRecipient &rcp, recipients)
-    {
-        // generate bold amount string
-        QString amount = "<b>" + BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), rcp.amount);
-        amount.append("</b>");
-        // generate monospace address string
-        QString address = "<span style='font-family: monospace;'>" + rcp.address;
-        address.append("</span>");
-
-        QString recipientElement;
-
-        if (!rcp.paymentRequest.IsInitialized()) // normal payment
-        {
-            if(rcp.label.length() > 0) // label with address
-            {
-                recipientElement = tr("%1 to %2").arg(amount, GUIUtil::HtmlEscape(rcp.label));
-                recipientElement.append(QString(" (%1)").arg(address));
-            }
-            else // just address
-            {
-                recipientElement = tr("%1 to %2").arg(amount, address);
-            }
-        }
-        else if(!rcp.authenticatedMerchant.isEmpty()) // secure payment request
-        {
-            recipientElement = tr("%1 to %2").arg(amount, GUIUtil::HtmlEscape(rcp.authenticatedMerchant));
-        }
-        else // insecure payment request
-        {
-            recipientElement = tr("%1 to %2").arg(amount, address);
-        }
-
-        formatted.append(recipientElement);
-    }
-
     fNewRecipientAllowed = false;
-
-
     WalletModel::UnlockContext ctx(model->requestUnlock());
     if(!ctx.isValid())
     {
@@ -281,6 +248,44 @@ void SendCoinsDialog::on_sendButton_clicked()
     }
 
     CAmount txFee = currentTransaction.getTransactionFee();
+
+    // Format confirmation message
+    QStringList formatted;
+    foreach(const SendCoinsRecipient &rcp, currentTransaction.getRecipients())
+    {
+        // generate bold amount string
+        QString amount = "<b>" + BitcoinUnits::formatHtmlWithUnit(model->getOptionsModel()->getDisplayUnit(), rcp.amount);
+        amount.append("</b>");
+        // generate monospace address string
+        QString address = "<span style='font-family: monospace;'>" + rcp.address;
+        address.append("</span>");
+
+        QString recipientElement;
+
+        if (!rcp.paymentRequest.IsInitialized()) // normal payment
+        {
+            if(rcp.label.length() > 0) // label with address
+            {
+                recipientElement = tr("%1 to %2").arg(amount, GUIUtil::HtmlEscape(rcp.label));
+                recipientElement.append(QString(" (%1)").arg(address));
+            }
+            else // just address
+            {
+                recipientElement = tr("%1 to %2").arg(amount, address);
+            }
+        }
+        else if(!rcp.authenticatedMerchant.isEmpty()) // authenticated payment request
+        {
+            recipientElement = tr("%1 to %2").arg(amount, GUIUtil::HtmlEscape(rcp.authenticatedMerchant));
+        }
+        else // unauthenticated payment request
+        {
+            recipientElement = tr("%1 to %2").arg(amount, address);
+        }
+
+        formatted.append(recipientElement);
+    }
+
     QString questionString = tr("Are you sure you want to send?");
     questionString.append("<br /><br />%1");
 
@@ -363,6 +368,7 @@ SendCoinsEntry *SendCoinsDialog::addEntry()
     ui->entries->addWidget(entry);
     connect(entry, SIGNAL(removeEntry(SendCoinsEntry*)), this, SLOT(removeEntry(SendCoinsEntry*)));
     connect(entry, SIGNAL(payAmountChanged()), this, SLOT(coinControlUpdateLabels()));
+    connect(entry, SIGNAL(subtractFeeFromAmountChanged()), this, SLOT(coinControlUpdateLabels()));
 
     updateTabsAndLabels();
 
@@ -521,8 +527,12 @@ void SendCoinsDialog::processSendCoinsReturn(const WalletModel::SendCoinsReturn 
         msgParams.first = tr("The transaction was rejected! This might happen if some of the coins in your wallet were already spent, such as if you used a copy of wallet.dat and coins were spent in the copy but not marked as spent here.");
         msgParams.second = CClientUIInterface::MSG_ERROR;
         break;
-    case WalletModel::InsaneFee:
-        msgParams.first = tr("A fee higher than %1 is considered an insanely high fee.").arg(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), 10000000));
+    case WalletModel::AbsurdFee:
+        msgParams.first = tr("A fee higher than %1 is considered an absurdly high fee.").arg(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), 10000000));
+        break;
+    case WalletModel::PaymentRequestExpired:
+        msgParams.first = tr("Payment request expired.");
+        msgParams.second = CClientUIInterface::MSG_ERROR;
         break;
     // included to prevent a compiler warning.
     case WalletModel::OK:
@@ -631,7 +641,7 @@ void SendCoinsDialog::updateSmartFeeLabel()
     {
         ui->labelSmartFee->setText(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), feeRate.GetFeePerK()) + "/kB");
         ui->labelSmartFee2->hide();
-        ui->labelFeeEstimation->setText(tr("Estimated to begin confirmation within %1 block(s).").arg(nBlocksToConfirm));
+        ui->labelFeeEstimation->setText(tr("Estimated to begin confirmation within %n block(s).", "", nBlocksToConfirm));
     }
 
     updateFeeMinimizedLabel();
@@ -652,19 +662,19 @@ void SendCoinsDialog::coinControlClipboardAmount()
 // Coin Control: copy label "Fee" to clipboard
 void SendCoinsDialog::coinControlClipboardFee()
 {
-    GUIUtil::setClipboard(ui->labelCoinControlFee->text().left(ui->labelCoinControlFee->text().indexOf(" ")).replace("~", ""));
+    GUIUtil::setClipboard(ui->labelCoinControlFee->text().left(ui->labelCoinControlFee->text().indexOf(" ")).replace(ASYMP_UTF8, ""));
 }
 
 // Coin Control: copy label "After fee" to clipboard
 void SendCoinsDialog::coinControlClipboardAfterFee()
 {
-    GUIUtil::setClipboard(ui->labelCoinControlAfterFee->text().left(ui->labelCoinControlAfterFee->text().indexOf(" ")).replace("~", ""));
+    GUIUtil::setClipboard(ui->labelCoinControlAfterFee->text().left(ui->labelCoinControlAfterFee->text().indexOf(" ")).replace(ASYMP_UTF8, ""));
 }
 
 // Coin Control: copy label "Bytes" to clipboard
 void SendCoinsDialog::coinControlClipboardBytes()
 {
-    GUIUtil::setClipboard(ui->labelCoinControlBytes->text().replace("~", ""));
+    GUIUtil::setClipboard(ui->labelCoinControlBytes->text().replace(ASYMP_UTF8, ""));
 }
 
 // Coin Control: copy label "Priority" to clipboard
@@ -682,7 +692,7 @@ void SendCoinsDialog::coinControlClipboardLowOutput()
 // Coin Control: copy label "Change" to clipboard
 void SendCoinsDialog::coinControlClipboardChange()
 {
-    GUIUtil::setClipboard(ui->labelCoinControlChange->text().left(ui->labelCoinControlChange->text().indexOf(" ")).replace("~", ""));
+    GUIUtil::setClipboard(ui->labelCoinControlChange->text().left(ui->labelCoinControlChange->text().indexOf(" ")).replace(ASYMP_UTF8, ""));
 }
 
 // Coin Control: settings menu - coin control enabled/disabled by user
@@ -774,11 +784,17 @@ void SendCoinsDialog::coinControlUpdateLabels()
 
     // set pay amounts
     CoinControlDialog::payAmounts.clear();
+    CoinControlDialog::fSubtractFeeFromAmount = false;
     for(int i = 0; i < ui->entries->count(); ++i)
     {
         SendCoinsEntry *entry = qobject_cast<SendCoinsEntry*>(ui->entries->itemAt(i)->widget());
         if(entry)
-            CoinControlDialog::payAmounts.append(entry->getValue().amount);
+        {
+            SendCoinsRecipient rcp = entry->getValue();
+            CoinControlDialog::payAmounts.append(rcp.amount);
+            if (rcp.fSubtractFeeFromAmount)
+                CoinControlDialog::fSubtractFeeFromAmount = true;
+        }
     }
 
     if (CoinControlDialog::coinControl->HasSelected())

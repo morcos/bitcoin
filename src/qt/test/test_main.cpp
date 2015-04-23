@@ -1,4 +1,4 @@
-// Copyright (c) 2009-2014 The Bitcoin developers
+// Copyright (c) 2009-2014 The Bitcoin Core developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -6,6 +6,7 @@
 #include "config/bitcoin-config.h"
 #endif
 
+#include "util.h"
 #include "uritests.h"
 
 #ifdef ENABLE_WALLET
@@ -27,6 +28,7 @@ Q_IMPORT_PLUGIN(qkrcodecs)
 // This is all you need to run all the tests
 int main(int argc, char *argv[])
 {
+    SetupEnvironment();
     bool fInvalid = false;
 
     // Don't remove this, it's needed to access
