@@ -73,7 +73,7 @@ if BUILD_BITCOIND
 endif
 
 if BUILD_BITCOIN_UTILS
-  bin_PROGRAMS += bitcoin-cli bitcoin-tx
+  bin_PROGRAMS += bitcoin-cli bitcoin-tx feetool
 endif
 
 .PHONY: FORCE
@@ -392,6 +392,27 @@ bitcoin_tx_LDADD = \
 
 bitcoin_tx_LDADD += $(BOOST_LIBS) $(CRYPTO_LIBS)
 #
+
+# feetool binary #
+feetool_SOURCES = feetool.cpp
+feetool_CPPFLAGS = $(BITCOIN_INCLUDES)
+feetool_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
+
+feetool_LDADD = \
+  $(LIBBITCOIN_SERVER) \
+  $(LIBBITCOIN_COMMON) \
+  $(LIBBITCOIN_UNIVALUE) \
+  $(LIBBITCOIN_UTIL) \
+  $(LIBBITCOIN_CRYPTO) \
+  $(LIBLEVELDB) \
+  $(LIBMEMENV) \
+  $(LIBSECP256K1)
+
+if ENABLE_WALLET
+feetool_LDADD += libbitcoin_wallet.a
+endif
+
+feetool_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(SSL_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS)
 
 # bitcoinconsensus library #
 if BUILD_BITCOIN_LIBS
