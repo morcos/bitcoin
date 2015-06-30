@@ -142,7 +142,7 @@ public:
      * Update all transactions in the mempool which depend on tx to recalculate their priority
      * and reflect that the inputs from this transaction are now in the chain and will age in priority.
      */
-    void updateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight);
+    void updateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight, bool addToChain);
 
     /** Affect CreateNewBlock prioritisation of transactions */
     void PrioritiseTransaction(const uint256 hash, const std::string strHash, double dPriorityDelta, const CAmount& nFeeDelta);

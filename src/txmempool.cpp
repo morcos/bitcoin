@@ -55,16 +55,15 @@ CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
 
 /**
  * Recalculate the cached priority as of currentHeight and increase inChainInputValue by
- * newlyInChainValue which represents input that was just included in the blockchain.
+ * valueInCurrentBlock which represents input that was just added to or removed from the blockchain.
  */
-void CTxMemPoolEntry::recalcPriority(unsigned int currentHeight, CAmount newlyInChainValue)
+void CTxMemPoolEntry::recalcPriority(unsigned int currentHeight, CAmount valueInCurrentBlock)
 {
-    if (currentHeight > cachedHeight) {
-        double deltaPriority = ((double)(currentHeight-cachedHeight)*inChainInputValue)/nModSize;
-        cachedPriority += deltaPriority;
-        cachedHeight = currentHeight;
-    }
-    inChainInputValue += newlyInChainValue;
+    double deltaPriority = ((double)(currentHeight-cachedHeight)*inChainInputValue)/nModSize;
+    cachedPriority += deltaPriority;
+    cachedHeight = currentHeight;
+    inChainInputValue += valueInCurrentBlock;
+    assert(MoneyRange(inChainInputValue));
 }
 
 CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
@@ -215,7 +214,7 @@ void CTxMemPool::removeConflicts(const CTransaction &tx, std::list<CTransaction>
     }
 }
 
-void CTxMemPool::updateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight)
+void CTxMemPool::updateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight, bool addToChain)
 {
     LOCK(cs);
     for (unsigned int i = 0; i < tx.vout.size(); i++) {
@@ -224,7 +223,7 @@ void CTxMemPool::updateDependentPriorities(const CTransaction &tx, unsigned int 
             continue;
         uint256 hash = it->second.ptx->GetHash();
         assert(mapTx.count(hash));
-        mapTx[hash].recalcPriority(nBlockHeight, tx.vout[i].nValue);
+        mapTx[hash].recalcPriority(nBlockHeight, addToChain ? tx.vout[i].nValue : -tx.vout[i].nValue);
     }
 }
 
@@ -245,7 +244,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
     BOOST_FOREACH(const CTransaction& tx, vtx)
     {
         std::list<CTransaction> dummy;
-        updateDependentPriorities(tx, nBlockHeight);
+        updateDependentPriorities(tx, nBlockHeight, true);
         remove(tx, dummy, false);
         removeConflicts(tx, conflicts);
         ClearPrioritisation(tx.GetHash());
