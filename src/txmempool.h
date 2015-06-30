@@ -43,16 +43,26 @@ private:
     int64_t nTime; //! Local time when entering the mempool
     double entryPriority; //! Priority when entering the mempool
     unsigned int entryHeight; //! Chain height when entering the mempool
+    double cachedPriority; //! Last calculated priority
+    double cachedHeight; //! Height at which priority was last calculated
     bool hadNoDependencies; //! Not dependent on any other txs when it entered the mempool
+    CAmount inChainInputValue; //! Sum of all txin values that are already in blockchain
 
 public:
     CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
-                    int64_t _nTime, double _entryPriority, unsigned int _entryHeight, bool poolHasNoInputsOf = false);
+                    int64_t _nTime, double _entryPriority, unsigned int _entryHeight,
+                    bool poolHasNoInputsOf = false, CAmount inChainInputValue = 0);
     CTxMemPoolEntry();
     CTxMemPoolEntry(const CTxMemPoolEntry& other);
 
     const CTransaction& GetTx() const { return this->tx; }
+    double GetStartingPriority() const {return entryPriority; }
+    /**
+     * Fast calculation of priority as update from cached value, but only valid if
+     * currentHeight is greater than last height it was recalculated.
+     */
     double GetPriority(unsigned int currentHeight) const;
+    void recalcPriority(unsigned int currentHeight, CAmount newlyInChainValue);
     CAmount GetFee() const { return nFee; }
     size_t GetTxSize() const { return nTxSize; }
     int64_t GetTime() const { return nTime; }
@@ -128,6 +138,11 @@ public:
      * the tx is not dependent on other mempool transactions to be included in a block.
      */
     bool HasNoInputsOf(const CTransaction& tx) const;
+    /**
+     * Update all transactions in the mempool which depend on tx to recalculate their priority
+     * and reflect that the inputs from this transaction are now in the chain and will age in priority.
+     */
+    void updateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight);
 
     /** Affect CreateNewBlock prioritisation of transactions */
     void PrioritiseTransaction(const uint256 hash, const std::string strHash, double dPriorityDelta, const CAmount& nFeeDelta);

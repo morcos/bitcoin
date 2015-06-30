@@ -21,16 +21,21 @@ CTxMemPoolEntry::CTxMemPoolEntry():
     nFee(0), nTxSize(0), nModSize(0), nTime(0), entryPriority(0.0), hadNoDependencies(false)
 {
     entryHeight = MEMPOOL_HEIGHT;
+    cachedHeight = entryHeight;
+    cachedPriority = entryPriority;
+    inChainInputValue = 0;
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
-                                 int64_t _nTime, double _entryPriority,
-                                 unsigned int _entryHeight, bool poolHasNoInputsOf):
+                                 int64_t _nTime, double _entryPriority, unsigned int _entryHeight,
+                                 bool poolHasNoInputsOf, CAmount _inChainInputValue):
     tx(_tx), nFee(_nFee), nTime(_nTime), entryPriority(_entryPriority), entryHeight(_entryHeight),
-    hadNoDependencies(poolHasNoInputsOf)
+    hadNoDependencies(poolHasNoInputsOf), inChainInputValue(_inChainInputValue)
 {
     nTxSize = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
     nModSize = tx.CalculateModifiedSize(nTxSize);
+    cachedHeight = entryHeight;
+    cachedPriority = entryPriority;
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
@@ -41,10 +46,25 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
 double
 CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
 {
-    CAmount nValueIn = tx.GetValueOut()+nFee;
-    double deltaPriority = ((double)(currentHeight-entryHeight)*nValueIn)/nModSize;
-    double dResult = entryPriority + deltaPriority;
+    if (currentHeight < cachedHeight)
+        return 0; // Can not calculate a priority before the height of the last cached calculation
+    double deltaPriority = ((double)(currentHeight-cachedHeight)*inChainInputValue)/nModSize;
+    double dResult = cachedPriority + deltaPriority;
     return dResult;
+}
+
+/**
+ * Recalculate the cached priority as of currentHeight and increase inChainInputValue by
+ * newlyInChainValue which represents input that was just included in the blockchain.
+ */
+void CTxMemPoolEntry::recalcPriority(unsigned int currentHeight, CAmount newlyInChainValue)
+{
+    if (currentHeight > cachedHeight) {
+        double deltaPriority = ((double)(currentHeight-cachedHeight)*inChainInputValue)/nModSize;
+        cachedPriority += deltaPriority;
+        cachedHeight = currentHeight;
+    }
+    inChainInputValue += newlyInChainValue;
 }
 
 CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
@@ -195,6 +215,19 @@ void CTxMemPool::removeConflicts(const CTransaction &tx, std::list<CTransaction>
     }
 }
 
+void CTxMemPool::updateDependentPriorities(const CTransaction &tx, unsigned int nBlockHeight)
+{
+    LOCK(cs);
+    for (unsigned int i = 0; i < tx.vout.size(); i++) {
+        std::map<COutPoint, CInPoint>::iterator it = mapNextTx.find(COutPoint(tx.GetHash(), i));
+        if (it == mapNextTx.end())
+            continue;
+        uint256 hash = it->second.ptx->GetHash();
+        assert(mapTx.count(hash));
+        mapTx[hash].recalcPriority(nBlockHeight, tx.vout[i].nValue);
+    }
+}
+
 /**
  * Called when a block is connected. Removes from mempool and updates the miner fee estimator.
  */
@@ -212,6 +245,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
     BOOST_FOREACH(const CTransaction& tx, vtx)
     {
         std::list<CTransaction> dummy;
+        updateDependentPriorities(tx, nBlockHeight);
         remove(tx, dummy, false);
         removeConflicts(tx, conflicts);
         ClearPrioritisation(tx.GetHash());
