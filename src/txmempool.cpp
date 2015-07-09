@@ -311,6 +311,17 @@ void CTxMemPool::queryHashes(vector<uint256>& vtxid)
         vtxid.push_back((*mi).first);
 }
 
+int CTxMemPool::GetRelayMultiplier()
+{
+    int mult = 1;
+    uint64_t mempoolSize = GetTotalTxSize();
+    while (mempoolSize > MEMPOOL_BASE_SIZE) {
+        mempoolSize -= MEMPOOL_BASE_SIZE;
+        mult *= 2;
+    }
+    return mult;
+}
+
 bool CTxMemPool::lookup(uint256 hash, CTransaction& result) const
 {
     LOCK(cs);

@@ -867,7 +867,13 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
                              REJECT_INSUFFICIENTFEE, "insufficient fee");
 
         // Require that free transactions have sufficient priority to be mined in the next block.
-        if (GetBoolArg("-relaypriority", true) && nFees < ::minRelayTxFee.GetFee(nSize) && !AllowFree(view.GetPriority(tx, chainActive.Height() + 1))) {
+        int relayMultiplier = pool.GetRelayMultiplier();
+        CAmount minRelayFeeForTx = ::minRelayTxFee.GetFee(nSize);
+        if (GetBoolArg("-relaypriority", true) && nFees < (minRelayFeeForTx * relayMultiplier) &&
+            !AllowFree(view.GetPriority(tx, chainActive.Height() + 1))) {
+            if (nFees >= minRelayFeeForTx)
+                LogPrint("mempool", "Fee insufficient due to raised relay minimum: %d < %d < %d\n",
+                         minRelayFeeForTx, nFees, minRelayFeeForTx * relayMultiplier);
             return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "insufficient priority");
         }
 

@@ -30,6 +30,9 @@ inline bool AllowFree(double dPriority)
 /** Fake height value used in CCoins to signify they are only in the memory pool (since 0.8) */
 static const unsigned int MEMPOOL_HEIGHT = 0x7FFFFFFF;
 
+/** Base size for the mempool, minTxRelaySize, doubles every increase MEMPOOL_BASE_SIZE bytes */
+static const unsigned int MEMPOOL_BASE_SIZE = 1024*1024*72;  //Half a days worth of transactions
+
 /**
  * CTxMemPool stores these:
  */
@@ -133,6 +136,8 @@ public:
     void PrioritiseTransaction(const uint256 hash, const std::string strHash, double dPriorityDelta, const CAmount& nFeeDelta);
     void ApplyDeltas(const uint256 hash, double &dPriorityDelta, CAmount &nFeeDelta);
     void ClearPrioritisation(const uint256 hash);
+
+    int GetRelayMultiplier();
 
     unsigned long size()
     {
