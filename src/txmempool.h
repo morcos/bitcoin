@@ -44,7 +44,7 @@ private:
     double entryPriority; //! Priority when entering the mempool
     unsigned int entryHeight; //! Chain height when entering the mempool
     double cachedPriority; //! Last calculated priority
-    double cachedHeight; //! Height at which priority was last calculated
+    unsigned int cachedHeight; //! Height at which priority was last calculated
     bool hadNoDependencies; //! Not dependent on any other txs when it entered the mempool
     CAmount inChainInputValue; //! Sum of all txin values that are already in blockchain
 

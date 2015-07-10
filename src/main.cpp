@@ -2153,7 +2153,7 @@ bool static DisconnectTip(CValidationState &state) {
         // ignore validation errors in resurrected transactions
         list<CTransaction> removed;
         CValidationState stateDummy;
-        mempool.updateDependentPriorities(tx, pindexDelete->nHeight - 1, false);
+        mempool.updateDependentPriorities(tx, pindexDelete->nHeight, false);
         if (tx.IsCoinBase() || !AcceptToMemoryPool(mempool, stateDummy, tx, false, NULL))
             mempool.remove(tx, removed, true);
     }
