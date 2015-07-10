@@ -267,7 +267,7 @@ void CTxMemPool::clear()
     ++nTransactionsUpdated;
 }
 
-void CTxMemPool::check(const CCoinsViewCache *pcoins) const
+void CTxMemPool::check(const CCoinsViewCache *pcoins, unsigned int nBlockHeight) const
 {
     if (!fSanityCheck)
         return;
@@ -277,6 +277,8 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const
     uint64_t checkTotal = 0;
 
     CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache*>(pcoins));
+    CCoinsViewMemPool viewMemPool(pcoinsTip, *this);
+    CCoinsViewCache view(&viewMemPool);
 
     LOCK(cs);
     list<const CTxMemPoolEntry*> waitingOnDependants;
@@ -284,6 +286,12 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const
         unsigned int i = 0;
         checkTotal += it->second.GetTxSize();
         const CTransaction& tx = it->second.GetTx();
+        CAmount dummyValue;
+        double freshPriority = view.GetPriority(tx, nBlockHeight, dummyValue);
+        double cachePriority = it->second.GetPriority(nBlockHeight);
+        double priDiff = cachePriority - freshPriority;
+        assert(priDiff < .0001 * freshPriority + 1);
+        assert(priDiff > -(.0001 * freshPriority + 1));
         bool fDependsWait = false;
         BOOST_FOREACH(const CTxIn &txin, tx.vin) {
             // Check that every mempool transaction's inputs refer to available coins, or other mempool tx's.
@@ -440,7 +448,7 @@ bool CTxMemPool::HasNoInputsOf(const CTransaction &tx) const
     return true;
 }
 
-CCoinsViewMemPool::CCoinsViewMemPool(CCoinsView *baseIn, CTxMemPool &mempoolIn) : CCoinsViewBacked(baseIn), mempool(mempoolIn) { }
+CCoinsViewMemPool::CCoinsViewMemPool(CCoinsView *baseIn, const CTxMemPool &mempoolIn) : CCoinsViewBacked(baseIn), mempool(mempoolIn) { }
 
 bool CCoinsViewMemPool::GetCoins(const uint256 &txid, CCoins &coins) const {
     // If an entry in the mempool exists, always return that one, as it's guaranteed to never
