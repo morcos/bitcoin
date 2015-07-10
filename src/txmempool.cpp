@@ -46,10 +46,14 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
 double
 CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
 {
-    if (currentHeight < cachedHeight)
-        return 0; // Can not calculate a priority before the height of the last cached calculation
-    double deltaPriority = ((double)(currentHeight-cachedHeight)*inChainInputValue)/nModSize;
+    // This will only return accurate results when currentHeight >= the heights
+    // at which all the in-chain inputs of the tx were included in blocks.
+    // Typical usage of GetPriority with chainActive.Height() will ensure this.
+    int heightDiff = currentHeight - cachedHeight;
+    double deltaPriority = ((double)heightDiff*inChainInputValue)/nModSize;
     double dResult = cachedPriority + deltaPriority;
+    if (dResult < 0) // This should only happen if it was called with an invalid height
+        dResult = 0;
     return dResult;
 }
 
@@ -59,7 +63,8 @@ CTxMemPoolEntry::GetPriority(unsigned int currentHeight) const
  */
 void CTxMemPoolEntry::recalcPriority(unsigned int currentHeight, CAmount valueInCurrentBlock)
 {
-    double deltaPriority = ((double)(currentHeight-cachedHeight)*inChainInputValue)/nModSize;
+    int heightDiff = currentHeight - cachedHeight;
+    double deltaPriority = ((double)heightDiff*inChainInputValue)/nModSize;
     cachedPriority += deltaPriority;
     cachedHeight = currentHeight;
     inChainInputValue += valueInCurrentBlock;
