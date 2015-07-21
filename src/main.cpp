@@ -895,10 +895,27 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         unsigned int nSize = entry.GetTxSize();
 
         // Try to make space in mempool
+        size_t softcap = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 700000;
+        size_t hardcap = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000;
+        size_t capstep = (hardcap - softcap) / 10;
         std::set<uint256> stagedelete;
         CAmount nFeesDeleted = 0;
-        if (!mempool.StageTrimToSize(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000, entry, stagedelete, nFeesDeleted)) {
-            return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full");
+        if (!mempool.StageTrimToSize(softcap, entry, stagedelete, nFeesDeleted)) {
+            size_t expsize = mempool.DynamicMemoryUsage() + mempool.GuessDynamicMemoryUsage(entry);
+            if (expsize > hardcap)
+                return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full hard cap");
+            else {
+                int relayMult = 1;
+                while (expsize > softcap) {
+                    relayMult *= 2;
+                    assert(expsize > capstep);
+                    expsize -= capstep;
+                }
+                if (nFees < relayMult * ::minRelayTxFee.GetFee(nSize))
+                    return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full soft cap");
+                else
+                    LogPrint("mempool", "Tx %s entering reserve space size/fee %ld %ld at usage of %5.2f and mult of %d\n",tx.GetHash().ToString().substr(0,10).c_str(),nSize,nFees, mempool.DynamicMemoryUsage() + mempool.GuessDynamicMemoryUsage(entry), relayMult);
+            }
         }
 
         // Don't accept it if it can't get into a block
@@ -977,11 +994,10 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         if (nRelayFeeMultiplierTimestamp == 0) {
             nRelayFeeMultiplierTimestamp = nNow;
         } else if (nNow > nRelayFeeMultiplierTimestamp + 1000000) { // Update feerate at most once per second
-            double cap = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000.0;
-            double usage = std::max(cap * 0.5, pool.DynamicMemoryUsage() * 1.0); // Compute usage, clamped to [cap/2...cap].
-            double aimed = cap * 0.707106781; // Aim for the multiplicative average in between (cap/sqrt(2)).
+            double usage = std::max(softcap * 0.5, std::min(pool.DynamicMemoryUsage(), softcap) * 1.0); // Compute usage, clamped to [softcap/2...softcap].
+            double aimed = softcap * 0.707106781; // Aim for the multiplicative average in between (softcap/sqrt(2)).
             double factor = usage / aimed;
-            if (!stagedelete.empty()) {
+            if (!stagedelete.empty()) { //OPEN QUESTION: what if we got in using the reserve space?
                 // When the hard cap limitation is being used, instead converge towards the feerate of transactions actually being accepted.
                 double factor2 = nFees / (double)minRelayTxFee.GetFee(entry.GetTxSize());
                 factor = std::max(factor, factor2);
