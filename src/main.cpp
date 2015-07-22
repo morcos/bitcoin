@@ -994,6 +994,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         // Store transaction in memory
         pool.addUnchecked(hash, entry, !IsInitialBlockDownload());
 
+        #if 0
         // Adjust relay fee.
         int64_t nNow = GetTimeMicros();
         if (nRelayFeeMultiplierTimestamp == 0) {
@@ -1011,6 +1012,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
             minRelayTxFee.ApplyFactor(dRelayFeeMultiplier, defminRelayTxFee);
             nRelayFeeMultiplierTimestamp = nNow;
         }
+        #endif
     }
 
     SyncWithWallets(tx, NULL);
