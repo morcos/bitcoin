@@ -480,16 +480,18 @@ bool CTxMemPool::TrimMempool(size_t sizeToTrim, std::set<uint256> &protect, CAmo
     int iterextra = mustTrimAllSize ? 10 : 100; //Allow many more iterations to find large size during SurplusTrim
     int iterperfail = mustTrimAllSize ? 5 : 10; //Try to follow more links during SurplusTrim
     int failmax = 10; //Try no more than 10 starting transactions
+    uint64_t skipPattern = GetRand((uint64_t)1<<61);
     // Iterate from lowest feerate to highest feerate in the mempool:
     while (usageRemoved < sizeToTrim && it != mapTx.get<1>().rend()) {
+        //Randomly skip between 0 and 7 entries
+        unsigned int skipNum = std::min(fails,19);
+        for (unsigned int i = 0; i < ((uint64_t)7 & (skipPattern >> (3*skipNum))) && it != mapTx.get<1>().rend();i++,it++);
+        if (it == mapTx.get<1>().rend())
+            break;
+
         const uint256& hash = it->GetTx().GetHash();
         if (stage.count(hash)) {
             // If the transaction is already staged for deletion, we know its descendants are already processed, so skip it.
-            it++;
-            continue;
-        }
-        if (GetRand(10)) {
-            // Only try 1/10 of the transactions, in order to have some chance to avoid very big chains.
             it++;
             continue;
         }
