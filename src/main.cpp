@@ -1019,7 +1019,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         // Try to use excess relay fees paid by txs above the soft cap to trim in aggregate
         int64_t timeNow = GetTime();
         size_t curUsage = mempool.DynamicMemoryUsage();
-        if (curUsage > softcap && curUsage - softcap > 1000000 && timeNow - lastSurplusTrimTime > 60) {
+        if (curUsage > softcap + 1000000 && timeNow > lastSurplusTrimTime) {
             // Require at least 1M at highest fee rate we'll try to trim at, and try to trim 1MB
             lastSurplusTrimTime = timeNow;
             int rateZone = (curUsage - softcap - 1000000)/capstep + 1;
