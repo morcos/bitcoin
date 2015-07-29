@@ -941,6 +941,10 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
                 __func__, hash.ToString(), FormatStateMessage(state));
         }
 
+        if (!pool.TestMergedPartition(hash, entry)) {
+            return error("AcceptToMemoryPool: Partition failure %s", hash.ToString());
+        }
+
         // Store transaction in memory
         pool.addUnchecked(hash, entry, !IsInitialBlockDownload());
     }

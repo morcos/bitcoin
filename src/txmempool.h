@@ -45,6 +45,7 @@ private:
     double dPriority; //! Priority when entering the mempool
     unsigned int nHeight; //! Chain height when entering the mempool
     bool hadNoDependencies; //! Not dependent on any other txs when it entered the mempool
+    uint256 partition; //! Partition tx belongs to
 
 public:
     CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
@@ -60,6 +61,8 @@ public:
     unsigned int GetHeight() const { return nHeight; }
     bool WasClearAtEntry() const { return hadNoDependencies; }
     size_t DynamicMemoryUsage() const { return nUsageSize; }
+    uint256 GetPartition() const { return partition; }
+    void SetPartition(uint256 _partition) { partition = _partition; }
 };
 
 class CBlockPolicyEstimator;
@@ -77,6 +80,8 @@ public:
     bool IsNull() const { return (ptx == NULL && n == (uint32_t) -1); }
     size_t DynamicMemoryUsage() const { return 0; }
 };
+
+typedef std::map<uint256, std::pair<std::vector<uint256>, size_t> > PartitionMap;
 
 /**
  * CTxMemPool stores valid-according-to-the-current-best-chain
@@ -101,6 +106,8 @@ private:
 public:
     mutable CCriticalSection cs;
     std::map<uint256, CTxMemPoolEntry> mapTx;
+    PartitionMap mapPartitions; //! Map of partitions to vector of tx hashes in that partition and their total size
+    std::map<uint256, std::set<uint256> > staleMap; //! Set of stale partitions and associated recently removed tx hashes
     std::map<COutPoint, CInPoint> mapNextTx;
     std::map<uint256, std::pair<double, CAmount> > mapDeltas;
 
@@ -169,6 +176,15 @@ public:
     bool ReadFeeEstimates(CAutoFile& filein);
 
     size_t DynamicMemoryUsage() const;
+
+    /** Process staleMap of partitions that need updating **/
+    void Repartition();
+    /** Find all relatives of this transaction and determine their new partition **/
+    uint256 FindRelatedPartitions(const uint256 &newHash, const CTxMemPoolEntry &entry, std::set<uint256> &familyPartitions);
+    void SetMergedPartition(const uint256 &hash, const CTxMemPoolEntry &entry);
+    bool TestMergedPartition(const uint256 &hash, const CTxMemPoolEntry &entry);
+    /** Update to newPartition all the transactions in each of partitionsToUpdate **/
+    void UpdatePartition(uint256 newPartition, std::set<uint256> &partitionsToUpdate);
 };
 
 /** 

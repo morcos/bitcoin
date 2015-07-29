@@ -32,6 +32,7 @@ CTxMemPoolEntry::CTxMemPoolEntry(const CTransaction& _tx, const CAmount& _nFee,
     nTxSize = ::GetSerializeSize(tx, SER_NETWORK, PROTOCOL_VERSION);
     nModSize = tx.CalculateModifiedSize(nTxSize);
     nUsageSize = RecursiveDynamicUsage(tx);
+    partition = tx.GetHash();
 }
 
 CTxMemPoolEntry::CTxMemPoolEntry(const CTxMemPoolEntry& other)
@@ -62,6 +63,126 @@ CTxMemPool::CTxMemPool(const CFeeRate& _minRelayFee) :
 CTxMemPool::~CTxMemPool()
 {
     delete minerPolicyEstimator;
+}
+
+void CTxMemPool::Repartition() {
+    if (staleMap.empty())
+        return;
+    unsigned long int removedHashes = 0;
+    unsigned long int updatedHashes = 0;
+    int64_t start = GetTimeMicros();
+    std::map<uint256, std::set<uint256> >::iterator staleit = staleMap.begin();
+    for ( ; staleit != staleMap.end() ; staleit++) {
+        std::set<uint256> hashesToUpdate;
+        removedHashes += staleit->second.size();
+        PartitionMap::iterator partit = mapPartitions.find(staleit->first);
+        if (partit != mapPartitions.end()) {
+            BOOST_FOREACH(const uint256 &hash, partit->second.first) {
+                if (!staleit->second.count(hash)) {
+                    hashesToUpdate.insert(hash);
+                }
+            }
+        }
+        mapPartitions.erase(staleit->first);
+        BOOST_FOREACH(const uint256 &hash, hashesToUpdate) {
+            mapTx[hash].SetPartition(hash);
+            mapPartitions[hash].first.push_back(hash);
+            mapPartitions[hash].second += mapTx[hash].GetTxSize();
+        }
+        BOOST_FOREACH(const uint256 &hash, hashesToUpdate) {
+            SetMergedPartition(hash, mapTx[hash]);
+        }
+        updatedHashes += hashesToUpdate.size();
+    }
+    double msec = (double)(GetTimeMicros() - start)/1000.0;
+    LogPrint("mempool", "Repartitioning %lu partitions for %lu removed transactions causing %lu txs to be updated in %9.3f ms\n",staleMap.size(),removedHashes,updatedHashes,msec);
+    staleMap.clear();
+}
+
+bool CTxMemPool::TestMergedPartition(const uint256 &hash, const CTxMemPoolEntry &entry) {
+    std::set<uint256> familyPartitions; // all txs in these partitions will need to be updated
+    FindRelatedPartitions(hash, entry, familyPartitions); // could pass in max here
+    size_t partition_size = 0;
+    unsigned int partition_count = 0;
+    unsigned int tx_count = 0;
+    BOOST_FOREACH(const uint256 &part, familyPartitions) {
+        tx_count += mapPartitions[part].first.size();
+        partition_size += mapPartitions[part].second;
+        partition_count++;
+    }
+    if (partition_size + entry.GetTxSize() > 500000) {
+        LogPrint("mempool", "PartitionReject: New partition total size too big %lu\n",partition_size + entry.GetTxSize());
+        return false;
+    }
+    if (tx_count + 1 > 1000) {
+        LogPrint("mempool", "PartitionReject: New partition tx count too big %u\n",tx_count + 1);
+        return false;
+    }
+    if (partition_count > 100) {
+        LogPrint("mempool", "PartitionReject: Combining too many partitions %u\n",partition_count);
+        return false;
+    }
+    return true;
+}
+
+void CTxMemPool::SetMergedPartition(const uint256 &hash, const CTxMemPoolEntry &entry) {
+    std::set<uint256> familyPartitions; // all txs in these partitions will need to be updated
+    uint256 newPart = FindRelatedPartitions(hash, entry, familyPartitions);
+    familyPartitions.insert(hash);
+    UpdatePartition(newPart, familyPartitions);
+}
+
+uint256 CTxMemPool::FindRelatedPartitions(const uint256 &newHash, const CTxMemPoolEntry &entry,
+                                          std::set<uint256> &familyPartitions) {
+    std::set<uint256> familyHashes; // only need to process each tx once
+    // add children
+    std::map<COutPoint, CInPoint>::iterator iter = mapNextTx.lower_bound(COutPoint(newHash, 0));
+    for (; iter != mapNextTx.end() && iter->first.hash == newHash; ++iter) {
+        uint256 hash = iter->second.ptx->GetHash();
+        familyHashes.insert(hash);
+    }
+    // add parents
+    const CTransaction &tx = entry.GetTx();
+    for (unsigned int i = 0; i < tx.vin.size(); i++) {
+        uint256 hash = tx.vin[i].prevout.hash;
+        familyHashes.insert(hash);
+    }
+    uint256 newPart = newHash;
+    unsigned int highcount = 1;
+    // identify all partitions that must be merged
+    BOOST_FOREACH(const uint256 &hash, familyHashes) {
+        std::map<uint256, CTxMemPoolEntry>::const_iterator it = mapTx.find(hash);
+        if (it != mapTx.end()) {
+            uint256 partition = it->second.GetPartition();
+            familyPartitions.insert(partition);
+            unsigned int partsize = mapPartitions[partition].first.size();
+            if (partsize > highcount) {
+                newPart = partition;
+                highcount = partsize;
+            }
+        }
+    }
+    return newPart;
+}
+
+void CTxMemPool::UpdatePartition(uint256 newPartition, std::set<uint256> &partitionsToUpdate) {
+    BOOST_FOREACH(const uint256 &part, partitionsToUpdate) {
+        if (part != newPartition) {
+            std::vector<uint256> hashesToUpdate;
+            PartitionMap::iterator partit = mapPartitions.find(part);
+            if (partit != mapPartitions.end()) {
+                BOOST_FOREACH(const uint256 &hash, partit->second.first) {
+                    hashesToUpdate.push_back(hash);
+                }
+            }
+            mapPartitions.erase(part);
+            BOOST_FOREACH(const uint256 &hash, hashesToUpdate) {
+                mapTx[hash].SetPartition(newPartition);
+                mapPartitions[newPartition].first.push_back(hash);
+                mapPartitions[newPartition].second += mapTx[hash].GetTxSize();
+            }
+        }
+    }
 }
 
 void CTxMemPool::pruneSpent(const uint256 &hashTx, CCoins &coins)
@@ -104,6 +225,13 @@ bool CTxMemPool::addUnchecked(const uint256& hash, const CTxMemPoolEntry &entry,
     totalTxSize += entry.GetTxSize();
     cachedInnerUsage += entry.DynamicMemoryUsage();
     minerPolicyEstimator->processTransaction(entry, fCurrentEstimate);
+    mapPartitions[hash].first.push_back(hash);
+    mapPartitions[hash].second += entry.GetTxSize();
+    if (!staleMap.empty()) {
+        LogPrintf("Found stale partitions, repartitioning\n");
+        Repartition();
+    }
+    SetMergedPartition(hash, entry);
 
     return true;
 }
@@ -149,6 +277,7 @@ void CTxMemPool::remove(const CTransaction &origTx, std::list<CTransaction>& rem
             removed.push_back(tx);
             totalTxSize -= mapTx[hash].GetTxSize();
             cachedInnerUsage -= mapTx[hash].DynamicMemoryUsage();
+            staleMap[mapTx[hash].GetPartition()].insert(hash);
             mapTx.erase(hash);
             nTransactionsUpdated++;
             minerPolicyEstimator->removeTx(hash);
@@ -221,6 +350,7 @@ void CTxMemPool::removeForBlock(const std::vector<CTransaction>& vtx, unsigned i
     }
     // After the txs in the new block have been removed from the mempool, update policy estimates
     minerPolicyEstimator->processBlock(nBlockHeight, entries, fCurrentEstimate);
+    Repartition();
 }
 
 void CTxMemPool::clear()
