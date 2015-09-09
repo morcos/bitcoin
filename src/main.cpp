@@ -886,7 +886,26 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
         CAmount txMinFee = GetMinRelayFee(tx, nSize, true);
         if (fLimitFree && nFees < txMinFee)
             return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "insufficient fee", false,
-                strprintf("%d < %d", nFees, txMinFee));
+                strprintf("%ld < %ld", nFees, txMinFee));
+
+        // Divide mempool into 20 bands of increasing required minimum fee
+        size_t mempoolBand = GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 50000;
+        size_t expsize = pool.DynamicMemoryUsage() + pool.GuessDynamicMemoryUsage(entry);
+        // Once mempool size is above first band, free transactions are no longer accepted
+        // and a higher minimum fee is required.
+        if (expsize > mempoolBand) {
+            int bandNumber = expsize/mempoolBand;
+            // Enforce the hard cap
+            if (bandNumber >= 20) {
+                return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "mempool full hard cap", false,
+                                 strprintf("%u", GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000));
+            }
+            double feeMultiplier = pow(1.41421356, bandNumber); // Fee requirement doubles every 2 bands (1/10th max mempool)
+            if (nFees < feeMultiplier * ::minRelayTxFee.GetFee(nSize)) {
+                return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "insufficient fee for mempool size", false,
+                                 strprintf("%ld < %ld", nFees, feeMultiplier * ::minRelayTxFee.GetFee(nSize)));
+            }
+        }
 
         // Require that free transactions have sufficient priority to be mined in the next block.
         if (GetBoolArg("-relaypriority", true) && nFees < ::minRelayTxFee.GetFee(nSize) && !AllowFree(view.GetPriority(tx, chainActive.Height() + 1))) {
