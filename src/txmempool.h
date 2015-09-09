@@ -185,6 +185,7 @@ public:
     bool TestMergedPartition(const uint256 &hash, const CTxMemPoolEntry &entry);
     /** Update to newPartition all the transactions in each of partitionsToUpdate **/
     void UpdatePartition(uint256 newPartition, std::set<uint256> &partitionsToUpdate);
+    size_t GuessDynamicMemoryUsage(const CTxMemPoolEntry& entry) const;
 };
 
 /** 
