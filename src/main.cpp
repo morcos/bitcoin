@@ -903,7 +903,7 @@ bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransa
             double feeMultiplier = pow(1.41421356, bandNumber); // Fee requirement doubles every 2 bands (1/10th max mempool)
             if (nFees < feeMultiplier * ::minRelayTxFee.GetFee(nSize)) {
                 return state.DoS(0, false, REJECT_INSUFFICIENTFEE, "insufficient fee for mempool size", false,
-                                 strprintf("%ld < %ld", nFees, feeMultiplier * ::minRelayTxFee.GetFee(nSize)));
+                                 strprintf("Mult: %d Fees: %ld < %ld", (int) feeMultiplier, nFees, feeMultiplier * ::minRelayTxFee.GetFee(nSize)));
             }
         }
 
@@ -4277,10 +4277,10 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
             RelayTransaction(tx);
             vWorkQueue.push_back(inv.hash);
 
-            LogPrint("mempool", "AcceptToMemoryPool: peer=%d %s: accepted %s (poolsz %u)\n",
-                pfrom->id, pfrom->cleanSubVer,
-                tx.GetHash().ToString(),
-                mempool.mapTx.size());
+            LogPrint("mempool", "AcceptToMemoryPool: peer=%d %s: accepted %s (poolsz %u txs %6.2fM usage)\n",
+                     pfrom->id, pfrom->cleanSubVer,
+                     tx.GetHash().ToString(),
+                     mempool.mapTx.size(), (double)mempool.DynamicMemoryUsage()/1000000);
 
             // Recursively process any orphan transactions that depended on this one
             set<NodeId> setMisbehaving;
