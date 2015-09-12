@@ -80,6 +80,12 @@ static inline size_t DynamicUsage(const std::set<X>& s)
     return MallocUsage(sizeof(stl_tree_node<X>)) * s.size();
 }
 
+template<typename X>
+static inline size_t IncrementalDynamicUsage(const std::set<X>& s)
+{
+    return MallocUsage(sizeof(stl_tree_node<X>));
+}
+
 template<typename X, typename Y>
 static inline size_t DynamicUsage(const std::map<X, Y>& m)
 {
@@ -94,6 +100,12 @@ struct boost_unordered_node : private X
 private:
     void* ptr;
 };
+
+template<typename X, typename Y>
+static inline size_t IncrementalDynamicUsage(const std::map<X, Y>& m)
+{
+    return MallocUsage(sizeof(stl_tree_node<std::pair<const X, Y> >));
+}
 
 template<typename X, typename Y>
 static inline size_t DynamicUsage(const boost::unordered_set<X, Y>& s)
