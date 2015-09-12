@@ -433,6 +433,6 @@ size_t CTxMemPool::DynamicMemoryUsage() const {
 }
 
 size_t CTxMemPool::GuessDynamicMemoryUsage(const CTxMemPoolEntry& entry) const {
-    return memusage::IncrementalDynamicUsage(mapTx) + entry.DynamicMemoryUsage() + (memusage::IncrementalDynamicUsage(mapNextTx)) * entry.GetTx().vin.size() + memusage::IncrementalDynamicUsage(mapLinks);
+  return memusage::IncrementalDynamicUsage(mapTx) + entry.DynamicMemoryUsage() + (memusage::IncrementalDynamicUsage(mapNextTx)) * entry.GetTx().vin.size();
 }
 
