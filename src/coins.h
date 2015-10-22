@@ -325,9 +325,12 @@ public:
     //! Retrieve the block hash whose state this CCoinsView currently represents
     virtual uint256 GetBestBlock() const;
 
+    //! Retrieve the block height whose state this CCoinsView currently represents
+    virtual int GetBestBlockHeight() const;
+
     //! Do a bulk modification (multiple CCoins changes + BestBlock change).
     //! The passed mapCoins can be modified.
-    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, int heightBlock);
 
     //! Calculate statistics about the unspent transaction output set
     virtual bool GetStats(CCoinsStats &stats) const;
@@ -348,8 +351,9 @@ public:
     bool GetCoins(const uint256 &txid, CCoins &coins) const;
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
+    int GetBestBlockHeight() const;
     void SetBackend(CCoinsView &viewIn);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, int heightBlock);
     bool GetStats(CCoinsStats &stats) const;
 };
 
@@ -389,6 +393,7 @@ protected:
      * declared as "const".  
      */
     mutable uint256 hashBlock;
+    mutable int heightBlock;
     mutable CCoinsMap cacheCoins;
 
     /* Cached dynamic memory usage for the inner CCoins objects. */
@@ -402,8 +407,9 @@ public:
     bool GetCoins(const uint256 &txid, CCoins &coins) const;
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
-    void SetBestBlock(const uint256 &hashBlock);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    int GetBestBlockHeight() const;
+    void SetBestBlock(const uint256 &hashBlock, int heightBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, int heightBlock);
 
     /**
      * Return a pointer to CCoins in the cache, or NULL if not found. This is

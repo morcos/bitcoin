@@ -24,6 +24,7 @@ static const char DB_TXINDEX = 't';
 static const char DB_BLOCK_INDEX = 'b';
 
 static const char DB_BEST_BLOCK = 'B';
+static const char DB_BEST_BLOCK_HEIGHT = 'H';
 static const char DB_FLAG = 'F';
 static const char DB_REINDEX_FLAG = 'R';
 static const char DB_LAST_BLOCK = 'l';
@@ -48,7 +49,14 @@ uint256 CCoinsViewDB::GetBestBlock() const {
     return hashBestChain;
 }
 
-bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
+int CCoinsViewDB::GetBestBlockHeight() const {
+    int heightBestChain;
+    if (!db.Read(DB_BEST_BLOCK_HEIGHT, heightBestChain))
+        return -1;
+    return heightBestChain;
+}
+
+bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, int heightBlock) {
     CLevelDBBatch batch(&db.GetObfuscateKey());
     size_t count = 0;
     size_t changed = 0;
@@ -64,8 +72,10 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         CCoinsMap::iterator itOld = it++;
         mapCoins.erase(itOld);
     }
-    if (!hashBlock.IsNull())
+    if (!hashBlock.IsNull()) {
         batch.Write(DB_BEST_BLOCK, hashBlock);
+        batch.Write(DB_BEST_BLOCK_HEIGHT, heightBlock);
+    }
 
     LogPrint("coindb", "Committing %u changed transactions (out of %u) to coin database...\n", (unsigned int)changed, (unsigned int)count);
     return db.WriteBatch(batch);
@@ -104,6 +114,8 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) const {
     CHashWriter ss(SER_GETHASH, PROTOCOL_VERSION);
     stats.hashBlock = GetBestBlock();
     ss << stats.hashBlock;
+    stats.nHeight = GetBestBlockHeight();
+    //ss << stats.nHeight; Don't change this?
     CAmount nTotalAmount = 0;
     while (pcursor->Valid()) {
         boost::this_thread::interruption_point();
@@ -130,10 +142,6 @@ bool CCoinsViewDB::GetStats(CCoinsStats &stats) const {
             break;
         }
         pcursor->Next();
-    }
-    {
-        LOCK(cs_main);
-        stats.nHeight = mapBlockIndex.find(stats.hashBlock)->second->nHeight;
     }
     stats.hashSerialized = ss.GetHash();
     stats.nTotalAmount = nTotalAmount;
