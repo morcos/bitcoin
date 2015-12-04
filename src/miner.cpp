@@ -275,9 +275,15 @@ CBlockTemplate* CreateNewBlock(const CChainParams& chainparams, const CScript& s
         nLastBlockSize = nBlockSize;
         LogPrintf("CreateNewBlock(): total size %u txs: %u fees: %ld sigops %d\n", nBlockSize, nBlockTx, nFees, nBlockSigOps);
 
+        std::vector<unsigned char> commitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
+
         // Compute final coinbase transaction.
         txNew.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
-        txNew.vin[0].scriptSig = CScript() << nHeight << OP_0;
+        txNew.vin[0].scriptSig = CScript() << nHeight;
+        if (!commitment.empty()) {
+            txNew.vin[0].scriptSig << commitment;
+        }
+        txNew.vin[0].scriptSig << OP_0;
         pblock->vtx[0] = txNew;
         pblocktemplate->vTxFees[0] = -nFees;
 

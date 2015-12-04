@@ -348,6 +348,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
             "      {\n"
             "         \"data\" : \"xxxx\",          (string) transaction data encoded in hexadecimal (byte-for-byte)\n"
             "         \"hash\" : \"xxxx\",          (string) hash/id encoded in little-endian hexadecimal\n"
+            "         \"withash\" : \"xxxx\",       (string) witness hash encoded in little-endian hexadecimal\n"
             "         \"depends\" : [              (array) array of numbers \n"
             "             n                        (numeric) transactions before this one (by 1-based index in 'transactions' list) that must be present in the final block if this one is\n"
             "             ,...\n"
@@ -540,6 +541,7 @@ UniValue getblocktemplate(const UniValue& params, bool fHelp)
         entry.push_back(Pair("data", EncodeHexTx(tx)));
 
         entry.push_back(Pair("hash", txHash.GetHex()));
+        entry.push_back(Pair("withash", tx.GetWitnessHash().GetHex()));
 
         UniValue deps(UniValue::VARR);
         BOOST_FOREACH (const CTxIn &in, tx.vin)

@@ -3003,6 +3003,25 @@ static bool CheckIndexAgainstCheckpoint(const CBlockIndex* pindexPrev, CValidati
     return true;
 }
 
+std::vector<unsigned char> GenerateCoinbaseCommitment(const CBlock& block, const CBlockIndex* pindexPrev, const Consensus::Params& consensusParams)
+{
+    std::vector<unsigned char> ret;
+    if (block.nVersion >= 5 && IsSuperMajority(5, pindexPrev, consensusParams.nMajorityEnforceBlockUpgrade, consensusParams)) {
+        ret.push_back(0xaa);
+        ret.push_back(0x21);
+        ret.push_back(0xa9);
+        ret.push_back(0xed);
+        ret.push_back(0x00);
+        ret.push_back(0x00);
+        ret.push_back(0x00);
+        ret.push_back(0x00);
+        ret.push_back(0x00);
+        uint256 witnessroot = BlockWitnessMerkleRoot(block, NULL);
+        ret.insert(ret.end(), witnessroot.begin(), witnessroot.end());
+    }
+    return ret;
+}
+
 static bool CheckCoinbaseCommitment(const CScript& script, const uint256& leaf, const std::vector<unsigned char> pathdata, const unsigned char typ[16])
 {
     CScript::const_iterator it = script.begin();
