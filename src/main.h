@@ -39,6 +39,7 @@ class CValidationInterface;
 class CValidationState;
 
 struct CNodeStateStats;
+struct LockPoints;
 
 /** Default for accepting alerts from the P2P network. */
 static const bool DEFAULT_ALERTS = true;
@@ -339,7 +340,7 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
  *
  * See consensus/consensus.h for flag definitions.
  */
-int64_t CheckLockTime(const CTransaction &tx, int flags = -1);
+int64_t CheckLockTime(const CTransaction &tx, int flags = -1, LockPoints* lp = NULL);
 
 /** 
  * Closure representing one script verification

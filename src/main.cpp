@@ -759,7 +759,7 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
     return CheckLocks(flags, block, nMinHeight, nMinTime);
 }
 
-int64_t CheckLockTime(const CTransaction &tx, int flags)
+int64_t CheckLockTime(const CTransaction &tx, int flags, LockPoints* lp)
 {
     AssertLockHeld(cs_main);
 
@@ -809,7 +809,13 @@ int64_t CheckLockTime(const CTransaction &tx, int flags)
         }
     }
 
-    return LockTime(tx, flags, &prevheights, index);
+    LockPoints lockPoints;
+    int maxInputHeight = 0;
+    CalculateLocks(tx, flags, &prevheights, index, lockPoints.height, lockPoints.time, maxInputHeight);
+    if (lp) {
+        *lp = lockPoints;
+    }
+    return CheckLocks(flags, index, lockPoints.height, lockPoints.time);
 }
 
 unsigned int GetLegacySigOpCount(const CTransaction& tx)
@@ -1055,7 +1061,8 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // Only accept nLockTime-using transactions that can be mined in the next
         // block; we don't want our mempool filled up with transactions that can't
         // be mined yet.
-        if (CheckLockTime(tx, STANDARD_LOCKTIME_VERIFY_FLAGS))
+        LockPoints lp;
+        if (CheckLockTime(tx, STANDARD_LOCKTIME_VERIFY_FLAGS, &lp))
             return state.DoS(0, false, REJECT_NONSTANDARD, "non-final");
 
         // Check for non-standard pay-to-script-hash in inputs
@@ -1089,7 +1096,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
             }
         }
 
-        CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOps);
+        CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOps, lp);
         unsigned int nSize = entry.GetTxSize();
 
         // Don't accept it if it can't get into a block
