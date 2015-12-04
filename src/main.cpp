@@ -776,7 +776,29 @@ bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeig
     return EvaluateSequenceLocks(block, CalculateSequenceLocks(tx, flags, prevHeights, block));
 }
 
-bool CheckSequenceLocks(const CTransaction &tx, int flags)
+bool TestLockPointValidity(const LockPoints* lp)
+{
+    AssertLockHeld(cs_main);
+    assert(lp);
+    const uint256& hash = lp->maxInputHash;
+    // If there are relative lock times then the maxInputHash will be set
+    // If there are no relative lock times, the LockPoints don't depend on the chain
+    if (!hash.IsNull()) {
+        BlockMap::iterator it = mapBlockIndex.find(hash);
+        assert(it != mapBlockIndex.end());
+        CBlockIndex* curChainBlock = chainActive[it->second->nHeight];
+        // Check whether chainActive is an extension of the block at which the LockPoints
+        // calculation was valid.  If not LockPoints are no longer valid
+        if (curChainBlock == NULL || curChainBlock->GetBlockHash() != hash) {
+            return false;
+        }
+    }
+
+    // LockPoints still valid
+    return true;
+}
+
+bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints* lp, bool useExistingLockPoints)
 {
     AssertLockHeld(cs_main);
 
@@ -808,8 +830,26 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags)
             prevheights[txinIndex] = coins.nHeight;
         }
     }
-
-    std::pair<int, int64_t> lockPair = CalculateSequenceLocks(tx, flags, &prevheights, index);
+    std::pair<int, int64_t> lockPair;
+    if (useExistingLockPoints) {
+        assert(lp);
+        lockPair.first = lp->height;
+        lockPair.second = lp->time;
+    }
+    else {
+        lockPair = CalculateSequenceLocks(tx, flags, &prevheights, index);
+        if (lp) {
+            lp->height = lockPair.first;
+            lp->time = lockPair.second;
+            // Also store the hash of the block with the heighest height of all
+            // the blocks which have sequence locked prevouts.
+            // This hash needs to still be on the chain
+            // for these LockPoint calculations to be valid
+            // Limit to current chain height in the case of mempool txs
+            int maxInputHeight = std::min(*std::max_element(prevheights.begin(), prevheights.end()), tip->nHeight);
+            lp->maxInputHash = tip->GetAncestor(maxInputHeight)->GetBlockHash();
+        }
+    }
     return EvaluateSequenceLocks(index, lockPair);
 }
 
@@ -1063,7 +1103,8 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
         // Only accept BIP68 sequence locked transactions that can be mined in the next
         // block; we don't want our mempool filled up with transactions that can't
         // be mined yet.
-        if (!CheckSequenceLocks(tx, STANDARD_LOCKTIME_VERIFY_FLAGS))
+        LockPoints lp;
+        if (!CheckSequenceLocks(tx, STANDARD_LOCKTIME_VERIFY_FLAGS, &lp))
             return state.DoS(0, false, REJECT_NONSTANDARD, "non-BIP68-final");
 
         // Check for non-standard pay-to-script-hash in inputs
@@ -1097,7 +1138,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState &state, const C
             }
         }
 
-        CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOps);
+        CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOps, lp);
         unsigned int nSize = entry.GetTxSize();
 
         // Don't accept it if it can't get into a block
