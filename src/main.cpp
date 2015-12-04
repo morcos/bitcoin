@@ -661,12 +661,10 @@ unsigned int LimitOrphanTxSize(unsigned int nMaxOrphans) EXCLUSIVE_LOCKS_REQUIRE
     return nEvicted;
 }
 
-int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prevHeights, const CBlockIndex& block)
+static void CalculateLocks(const CTransaction &tx, int flags, const std::vector<int>* prevHeights, const CBlockIndex& block,
+                           int& nMinHeight, int64_t& nMinTime, int& maxInputHeight)
 {
     assert(prevHeights == NULL || prevHeights->size() == tx.vin.size());
-    int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)
-                                    ? block.GetAncestor(std::max(block.nHeight-1, 0))->GetMedianTimePast()
-                                    : block.GetBlockTime();
 
     // tx.nVersion is signed integer so requires cast to unsigned otherwise
     // we would be doing a signed comparison and half the range of nVersion
@@ -677,8 +675,9 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
     // Will be set to the equivalent height- and time-based nLockTime
     // values that would be necessary to satisfy all relative lock-
     // time constraints given our view of block chain history.
-    int nMinHeight = 0;
-    int64_t nMinTime = 0;
+    nMinHeight = 0;
+    nMinTime = 0;
+    maxInputHeight = 0;
     // Will remain equal to true if all inputs are finalized
     // (CTxIn::SEQUENCE_FINAL).
     bool fFinalized = true;
@@ -706,6 +705,7 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
             continue;
 
         int nCoinHeight = (*prevHeights)[txinIndex];
+        maxInputHeight = std::max(maxInputHeight, nCoinHeight);
 
         if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) {
 
@@ -728,13 +728,19 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
     // If all sequence numbers are CTxIn::SEQUENCE_FINAL, the
     // transaction is considered final and nLockTime constraints
     // are not enforced.
-    if (fFinalized)
-        return 0;
+    if (!fFinalized) {
+        if ((int64_t)tx.nLockTime < LOCKTIME_THRESHOLD)
+            nMinHeight = std::max(nMinHeight, (int)tx.nLockTime);
+        else
+            nMinTime = std::max(nMinTime, (int64_t)tx.nLockTime);
+    }
+}
 
-    if ((int64_t)tx.nLockTime < LOCKTIME_THRESHOLD)
-        nMinHeight = std::max(nMinHeight, (int)tx.nLockTime);
-    else
-        nMinTime = std::max(nMinTime, (int64_t)tx.nLockTime);
+static int64_t CheckLocks(int flags, const CBlockIndex& block, int nMinHeight, int64_t nMinTime)
+{
+    int64_t nBlockTime = (flags & LOCKTIME_MEDIAN_TIME_PAST)
+                          ? block.GetAncestor(std::max(block.nHeight-1, 0))->GetMedianTimePast()
+                          : block.GetBlockTime();
 
     if (nMinHeight >= block.nHeight)
         return nMinHeight;
@@ -742,6 +748,15 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
         return nMinTime;
 
     return 0;
+}
+
+int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prevHeights, const CBlockIndex& block)
+{
+    int nMinHeight = 0;
+    int64_t nMinTime = 0;
+    int dummyMaxInputHeight = 0;
+    CalculateLocks(tx, flags, prevHeights, block, nMinHeight, nMinTime, dummyMaxInputHeight);
+    return CheckLocks(flags, block, nMinHeight, nMinTime);
 }
 
 int64_t CheckLockTime(const CTransaction &tx, int flags)
