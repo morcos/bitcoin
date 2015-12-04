@@ -759,7 +759,29 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
     return CheckLocks(flags, block, nMinHeight, nMinTime);
 }
 
-int64_t CheckLockTime(const CTransaction &tx, int flags, LockPoints* lp)
+bool TestLockPointValidity(const LockPoints* lp)
+{
+    AssertLockHeld(cs_main);
+    assert(lp);
+    const uint256& hash = lp->maxInputHash;
+    // If there are relative lock times then the maxInputHash will be set
+    // If there are no relative lock times, the LockPoints don't depend on the chain
+    if (!hash.IsNull()) {
+        BlockMap::iterator it = mapBlockIndex.find(hash);
+        assert(it != mapBlockIndex.end());
+        CBlockIndex* curChainBlock = chainActive[it->second->nHeight];
+        // Check whether chainActive is an extension of the block at which the LockPoints
+        // calculation was valid.  If not LockPoints are no longer valid
+        if (curChainBlock == NULL || curChainBlock->GetBlockHash() != hash) {
+            return false;
+        }
+    }
+
+    // LockPoints still valid
+    return true;
+}
+
+int64_t CheckLockTime(const CTransaction &tx, int flags, LockPoints* lp, bool useExistingLockPoints)
 {
     AssertLockHeld(cs_main);
 
@@ -810,10 +832,21 @@ int64_t CheckLockTime(const CTransaction &tx, int flags, LockPoints* lp)
     }
 
     LockPoints lockPoints;
-    int maxInputHeight = 0;
-    CalculateLocks(tx, flags, &prevheights, index, lockPoints.height, lockPoints.time, maxInputHeight);
-    if (lp) {
-        *lp = lockPoints;
+    if (useExistingLockPoints) {
+        assert(lp);
+        lockPoints = *lp;
+    }
+    else {
+        int maxInputHeight = 0;
+        CalculateLocks(tx, flags, &prevheights, index, lockPoints.height, lockPoints.time, maxInputHeight);
+        if (lp) {
+            // Store the latest hash which needs to still be on the chain
+            // for these LockPoint calculations to be valid.
+            // Limit to current chain height in the case of mempool txs
+            maxInputHeight = std::min(maxInputHeight, tip->nHeight);
+            lockPoints.maxInputHash = tip->GetAncestor(maxInputHeight)->GetBlockHash();
+            *lp = lockPoints;
+        }
     }
     return CheckLocks(flags, index, lockPoints.height, lockPoints.time);
 }

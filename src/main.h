@@ -340,7 +340,12 @@ int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prev
  *
  * See consensus/consensus.h for flag definitions.
  */
-int64_t CheckLockTime(const CTransaction &tx, int flags = -1, LockPoints* lp = NULL);
+int64_t CheckLockTime(const CTransaction &tx, int flags = -1, LockPoints* lp = NULL, bool useExistingLockPoints = false);
+
+/**
+ * Test whether the LockPoints height and time are still valid on the current chain
+ */
+bool TestLockPointValidity(const LockPoints* lp);
 
 /** 
  * Closure representing one script verification
