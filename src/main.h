@@ -327,21 +327,36 @@ void UpdateCoins(const CTransaction& tx, CValidationState &state, CCoinsViewCach
 bool CheckTransaction(const CTransaction& tx, CValidationState& state);
 
 /**
- * Check if transaction is final and can be included in a block. Consensus critical.
- * Takes as input a list of heights at which tx's inputs (in order) confirmed.
+ * Check if transaction is final and can be included in a block with the
+ * specified height and time. Consensus critical.
  */
-int64_t LockTime(const CTransaction &tx, int flags, const std::vector<int>* prevheights, const CBlockIndex& block);
+bool IsFinalTx(const CTransaction &tx, int nBlockHeight, int64_t nBlockTime);
 
 /**
  * Check if transaction will be final in the next block to be created.
  *
- * Calls LockTime() with data from the tip of the current active chain.
+ * Calls IsFinalTx() with current block height and appropriate block time.
  *
  * See consensus/consensus.h for flag definitions.
  */
-int64_t CheckLockTime(const CTransaction &tx, int flags = -1);
+bool CheckFinalTx(const CTransaction &tx, int flags = -1);
 
-/** 
+/**
+ * Check if transaction is final per BIP 68 sequence numbers and can be included in a block.
+ * Consensus critical. Takes as input a list of heights at which tx's inputs (in order) confirmed.
+ */
+bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block);
+
+/**
+ * Check if transaction will be BIP 68 final in the next block to be created.
+ *
+ * Calls SequenceLocks() with data from the tip of the current active chain.
+ *
+ * See consensus/consensus.h for flag definitions.
+ */
+bool CheckSequenceLocks(const CTransaction &tx, int flags);
+
+/**
  * Closure representing one script verification
  * Note that this stores references to the spending transaction 
  */
