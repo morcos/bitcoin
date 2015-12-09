@@ -57,11 +57,10 @@ struct {
     {2, 0xbbbeb305}, {2, 0xfe1c810a},
 };
 
-    CBlockIndex CreateBlockIndex(int nHeight, int64_t nTime)
+    CBlockIndex CreateBlockIndex(int nHeight)
     {
         CBlockIndex index;
         index.nHeight = nHeight;
-        index.nTime = nTime;
         index.pprev = chainActive.Tip();
         return index;
     }
@@ -252,7 +251,7 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
 
     // non-final txs in mempool
     SetMockTime(chainActive.Tip()->GetMedianTimePast()+1);
-
+    int flags = LOCKTIME_VERIFY_SEQUENCE|LOCKTIME_MEDIAN_TIME_PAST;
     // height map
     std::vector<int> prevheights;
 
@@ -271,8 +270,9 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.nLockTime = 0;
     hash = tx.GetHash();
     mempool.addUnchecked(hash, entry.Fee(100000000L).Time(GetTime()).SpendsCoinbase(true).FromTx(tx));
-    BOOST_CHECK(CheckLockTime(tx, LOCKTIME_VERIFY_SEQUENCE|LOCKTIME_MEDIAN_TIME_PAST) == chainActive.Tip()->nHeight + 1);
-    BOOST_CHECK(!LockTime(tx, LOCKTIME_VERIFY_SEQUENCE, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 2, chainActive.Tip()->GetMedianTimePast())));
+    BOOST_CHECK(CheckFinalTx(tx, flags)); // Locktime passes
+    BOOST_CHECK(!CheckSequenceLocks(tx, flags)); // Sequence locks fail
+    BOOST_CHECK(SequenceLocks(tx, flags, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 2))); // Sequence locks pass on 2nd block
 
     // relative time locked
     tx.vin[0].prevout.hash = txFirst[1]->GetHash();
@@ -280,8 +280,14 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     prevheights[0] = baseheight + 2;
     hash = tx.GetHash();
     mempool.addUnchecked(hash, entry.Time(GetTime()).FromTx(tx));
-    BOOST_CHECK(CheckLockTime(tx, LOCKTIME_VERIFY_SEQUENCE|LOCKTIME_MEDIAN_TIME_PAST) > chainActive.Tip()->GetMedianTimePast());
-    BOOST_CHECK(!LockTime(tx, LOCKTIME_VERIFY_SEQUENCE, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 1, chainActive.Tip()->GetMedianTimePast() + 512)));
+    BOOST_CHECK(CheckFinalTx(tx, flags)); // Locktime passes
+    BOOST_CHECK(!CheckSequenceLocks(tx, flags)); // Sequence locks fail
+
+    for (int i = 0; i < CBlockIndex::nMedianTimeSpan; i++)
+        chainActive.Tip()->GetAncestor(chainActive.Tip()->nHeight - i)->nTime += 512; //Trick the MedianTimePast
+    BOOST_CHECK(SequenceLocks(tx, flags, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 1))); // Sequence locks pass 512 seconds later
+    for (int i = 0; i < CBlockIndex::nMedianTimeSpan; i++)
+        chainActive.Tip()->GetAncestor(chainActive.Tip()->nHeight - i)->nTime -= 512; //undo tricked MTP
 
     // absolute height locked
     tx.vin[0].prevout.hash = txFirst[2]->GetHash();
@@ -290,8 +296,9 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     tx.nLockTime = chainActive.Tip()->nHeight + 1;
     hash = tx.GetHash();
     mempool.addUnchecked(hash, entry.Time(GetTime()).FromTx(tx));
-    BOOST_CHECK(CheckLockTime(tx, LOCKTIME_MEDIAN_TIME_PAST) == chainActive.Tip()->nHeight + 1);
-    BOOST_CHECK(!LockTime(tx, 0, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 2, chainActive.Tip()->GetMedianTimePast())));
+    BOOST_CHECK(!CheckFinalTx(tx, flags)); // Locktime fails
+    BOOST_CHECK(CheckSequenceLocks(tx, flags)); // Sequence locks pass
+    BOOST_CHECK(IsFinalTx(tx, chainActive.Tip()->nHeight + 2, chainActive.Tip()->GetMedianTimePast())); // Locktime passes on 2nd block
 
     // absolute time locked
     tx.vin[0].prevout.hash = txFirst[3]->GetHash();
@@ -300,25 +307,33 @@ BOOST_AUTO_TEST_CASE(CreateNewBlock_validity)
     prevheights[0] = baseheight + 4;
     hash = tx.GetHash();
     mempool.addUnchecked(hash, entry.Time(GetTime()).FromTx(tx));
-    BOOST_CHECK(CheckLockTime(tx, LOCKTIME_MEDIAN_TIME_PAST) == chainActive.Tip()->GetMedianTimePast());
-    BOOST_CHECK(!LockTime(tx, 0, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 1, chainActive.Tip()->GetMedianTimePast() + 1)));
+    BOOST_CHECK(!CheckFinalTx(tx, flags)); // Locktime fails
+    BOOST_CHECK(CheckSequenceLocks(tx, flags)); // Sequence locks pass
+    BOOST_CHECK(IsFinalTx(tx, chainActive.Tip()->nHeight + 2, chainActive.Tip()->GetMedianTimePast() + 1)); // Locktime passes 1 second later
 
-    // mempool-dependent transactions
+    // mempool-dependent transactions (not added)
     tx.vin[0].prevout.hash = hash;
     prevheights[0] = chainActive.Tip()->nHeight + 1;
     tx.nLockTime = 0;
+    tx.vin[0].nSequence = 0;
+    BOOST_CHECK(CheckFinalTx(tx, flags)); // Locktime passes
+    BOOST_CHECK(CheckSequenceLocks(tx, flags)); // Sequence locks pass
     tx.vin[0].nSequence = 1;
-    BOOST_CHECK(LockTime(tx, LOCKTIME_VERIFY_SEQUENCE, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 1, chainActive.Tip()->GetMedianTimePast()+1)) == chainActive.Tip()->nHeight + 1);
-    tx.vin[0].nSequence = CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG | 2;
-    BOOST_CHECK(LockTime(tx, LOCKTIME_VERIFY_SEQUENCE, &prevheights, CreateBlockIndex(chainActive.Tip()->nHeight + 1, chainActive.Tip()->GetMedianTimePast()+1)) > chainActive.Tip()->GetMedianTimePast());
+    BOOST_CHECK(!CheckSequenceLocks(tx, flags)); // Sequence locks fail
+    tx.vin[0].nSequence = CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG;
+    BOOST_CHECK(CheckSequenceLocks(tx, flags)); // Sequence locks pass
+    tx.vin[0].nSequence = CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG | 1;
+    BOOST_CHECK(!CheckSequenceLocks(tx, flags)); // Sequence locks fail
 
     BOOST_CHECK(pblocktemplate = CreateNewBlock(chainparams, scriptPubKey));
 
-    // None of the of the above height/time locked tx should have made
-    // it into the template.
-    BOOST_CHECK_EQUAL(pblocktemplate->block.vtx.size(), 1);
+    // None of the of the absolute height/time locked tx should have made
+    // it into the template because we still check IsFinalTx in CreateNewBlock,
+    // but relative locked txs will if inconsistently added to mempool.
+    // For now these will still generate a valid template until BIP68 soft fork
+    BOOST_CHECK_EQUAL(pblocktemplate->block.vtx.size(), 3);
     delete pblocktemplate;
-    // However if we advance height and time by one, all of them should be mined
+    // However if we advance height by 1 and time by 512, all of them should be mined
     for (int i = 0; i < CBlockIndex::nMedianTimeSpan; i++)
         chainActive.Tip()->GetAncestor(chainActive.Tip()->nHeight - i)->nTime += 512; //Trick the MedianTimePast
     chainActive.Tip()->nHeight++;

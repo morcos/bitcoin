@@ -188,18 +188,17 @@ void TransactionRecord::updateStatus(const CWalletTx &wtx)
     status.depth = wtx.GetDepthInMainChain();
     status.cur_num_blocks = chainActive.Height();
 
-    int64_t nLockTime = CheckLockTime(wtx);
-    if (nLockTime)
+    if (!CheckFinalTx(wtx))
     {
-        if (nLockTime < LOCKTIME_THRESHOLD)
+        if (wtx.nLockTime < LOCKTIME_THRESHOLD)
         {
             status.status = TransactionStatus::OpenUntilBlock;
-            status.open_for = nLockTime - chainActive.Height();
+            status.open_for = wtx.nLockTime - chainActive.Height();
         }
         else
         {
             status.status = TransactionStatus::OpenUntilDate;
-            status.open_for = nLockTime;
+            status.open_for = wtx.nLockTime;
         }
     }
     // For generated transactions, determine maturity
