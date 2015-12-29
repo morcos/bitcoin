@@ -597,6 +597,7 @@ public:
     unsigned int GetSigOpCount(const CScript& scriptSig) const;
 
     bool IsPayToScriptHash() const;
+    bool IsWitnessProgram(int& version, std::vector<unsigned char>& program) const;
 
     /** Called by IsStandardTx and P2SH/BIP62 VerifyScript (which makes it consensus-critical). */
     bool IsPushOnly(const_iterator pc) const;
@@ -617,6 +618,13 @@ public:
         // The default std::vector::clear() does not release memory.
         CScriptBase().swap(*this);
     }
+};
+
+struct CScriptWitness
+{
+    std::vector<std::vector<unsigned char> > stack;
+
+    bool IsNull() const { return stack.empty(); }
 };
 
 class CReserveScript
