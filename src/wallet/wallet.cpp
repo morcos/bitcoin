@@ -829,7 +829,10 @@ bool CWallet::AbandonTransaction(const uint256& hashTx)
             BOOST_FOREACH(const CTxIn& txin, wtx.vin)
             {
                 if (mapWallet.count(txin.prevout.hash))
+                {
                     mapWallet[txin.prevout.hash].MarkDirty();
+                    NotifyTransactionChanged(this, txin.prevout.hash, CT_UPDATED);
+                }
             }
         }
     }
