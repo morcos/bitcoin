@@ -707,10 +707,10 @@ bool CheckFinalTx(const CTransaction &tx, int flags)
 }
 
 /**
- * Calculates the block height and time which the transaction must be later than
- * in order to be considered final in the context of BIP 68.  It also removes
- * from the vector of input heights any entries which did not correspond to sequence
- * locked inputs as they do not affect the calculation.
+ * Calculates the block height and previous block's median time past at
+ * which the transaction will be considered final in the context of BIP 68.
+ * Also removes from the vector of input heights any entries which did not
+ * correspond to sequence locked inputs as they do not affect the calculation.
  */
 static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block)
 {
@@ -752,6 +752,14 @@ static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, in
 
         if (txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_TYPE_FLAG) {
             int64_t nCoinTime = block.GetAncestor(std::max(nCoinHeight-1, 0))->GetMedianTimePast();
+            // NOTE: Subtract 1 to maintain nLockTime semantics
+            // BIP 68 relative lock times have the semantics of calculating
+            // the first block or time at which the transaction would be
+            // valid. When calculating the effective block time or height
+            // for the entire transaction, we switch to using the
+            // semantics of nLockTime which is the last invalid block
+            // time or height.  Thus we subtract 1 from the calculated
+            // time or height.
 
             // Time-based relative lock-times are measured from the
             // smallest allowed timestamp of the block containing the
@@ -759,10 +767,6 @@ static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, in
             // block prior.
             nMinTime = std::max(nMinTime, nCoinTime + (int64_t)((txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_MASK) << CTxIn::SEQUENCE_LOCKTIME_GRANULARITY) - 1);
         } else {
-            // We subtract 1 from relative lock-times because a lock-
-            // time of 0 has the semantics of "same block," so a lock-
-            // time of 1 should mean "next block," but nLockTime has
-            // the semantics of "last invalid block height."
             nMinHeight = std::max(nMinHeight, nCoinHeight + (int)(txin.nSequence & CTxIn::SEQUENCE_LOCKTIME_MASK) - 1);
         }
     }
@@ -807,7 +811,7 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags)
         const CTxIn& txin = tx.vin[txinIndex];
         CCoins coins;
         if (!viewMemPool.GetCoins(txin.prevout.hash, coins)) {
-            return  error("%s: Missing input", __func__);
+            return error("%s: Missing input", __func__);
         }
         if (coins.nHeight == MEMPOOL_HEIGHT) {
             // Assume all mempool transaction confirm in the next block
@@ -2223,7 +2227,9 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
                 return state.DoS(100, error("ConnectBlock(): inputs missing/spent"),
                                  REJECT_INVALID, "bad-txns-inputs-missingorspent");
 
-            // Check that transaction is finalized
+            // Check that transaction is BIP68 final
+            // BIP68 lock checks (as opposed to nLockTime checks) must
+            // be in ConnectBlock because they require the UTXO set
             prevheights.resize(tx.vin.size());
             for (size_t j = 0; j < tx.vin.size(); j++) {
                 prevheights[j] = view.AccessCoins(tx.vin[j].prevout.hash)->nHeight;
