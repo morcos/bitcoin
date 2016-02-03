@@ -1291,6 +1291,17 @@ UniValue preciousblock(const JSONRPCRequest& request)
     return NullUniValue;
 }
 
+UniValue mempoolstats(const JSONRPCRequest& request)
+{
+    if (request.fHelp || request.params.size() != 0)
+        throw runtime_error(
+            "mempoolstats\n"
+            );
+
+    mempool.mempoolstats();
+    return NullUniValue;
+}
+
 UniValue invalidateblock(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() != 1)

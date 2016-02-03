@@ -179,7 +179,7 @@ public:
 
 
 /** Track confirm delays up to 25 blocks, can't estimate beyond that */
-static const unsigned int MAX_BLOCK_CONFIRMS = 25;
+static const unsigned int MAX_BLOCK_CONFIRMS = 1008;
 
 /** Decay of .998 is a half-life of 346 blocks or about 2.4 days */
 static const double DEFAULT_DECAY = .998;

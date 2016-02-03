@@ -475,6 +475,8 @@ public:
     };
     typedef std::set<txiter, CompareIteratorByHash> setEntries;
 
+    int64_t lastStatsTime;
+    void mempoolstats();
     const setEntries & GetMemPoolParents(txiter entry) const;
     const setEntries & GetMemPoolChildren(txiter entry) const;
 private:

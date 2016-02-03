@@ -171,6 +171,51 @@ void CTxMemPool::UpdateTransactionsFromBlock(const std::vector<uint256> &vHashes
     }
 }
 
+void CTxMemPool::mempoolstats() {
+    lastStatsTime = GetTime(); 
+    boost::filesystem::path est_path = GetDataDir() / "latestfee.dat";
+    CAutoFile est_fileout(fopen(est_path.string().c_str(), "wb"), SER_DISK, CLIENT_VERSION);
+    if (!est_fileout.IsNull())
+        WriteFeeEstimates(est_fileout);
+    LOCK(cs);
+    for (int i = 1; i < MAX_BLOCK_CONFIRMS; i= 2*i)
+        estimateFee(i);
+    if (MAX_BLOCK_CONFIRMS == 1008)
+        estimateFee(1000);
+    size_t totaltxs = mempool.size();
+    size_t totalsize = mempool.DynamicMemoryUsage();
+    LogPrintf("Mempool Size: %u\tBytes: %u\tUsage: %u\tMinFeeRate: %s\n",totaltxs,mempool.GetTotalTxSize(),totalsize,CFeeRate(rollingMinimumFeeRate).ToString());
+    size_t counter = 0;
+    CFeeRate max = CFeeRate(0);
+    indexed_transaction_set::nth_index<2>::type::iterator it = mapTx.get<2>().begin();
+    while (it != mapTx.get<2>().end() && counter < totaltxs/10) {
+        CFeeRate cur = CFeeRate(it->GetModifiedFee(), it->GetTxSize());
+        if (cur > max && it->WasClearAtEntry())
+            max = cur;
+        it++;
+        counter++;
+    }
+    if (it != mapTx.get<2>().end())
+        LogPrintf("Oldest 10 pct of txs, age > %ld and max fee %s\n", lastStatsTime - it->GetTime(), max.ToString());
+    size_t sizecounter = 0;
+    int decile = 1;
+    indexed_transaction_set::nth_index<3>::type::iterator it3 = mapTx.get<3>().begin();
+    if (it3 != mapTx.get<3>().end())
+        LogPrintf("CachedInnerUsage: %u Most expensive fee %s\n",cachedInnerUsage,CFeeRate(it3->GetModifiedFee(), it3->GetTxSize()).ToString());
+    while (it3 != mapTx.get<3>().end()) {
+        sizecounter += it3->DynamicMemoryUsage();
+        if (sizecounter > decile * cachedInnerUsage / 40) {
+            if (decile < 4 || decile % 4 == 0)
+                LogPrintf("Fee at %5.1f percentile %s\n",(double)(10*decile)/4,  CFeeRate(it3->GetModifiedFee(), it3->GetTxSize()).ToString());
+            decile++;
+        }
+        it3++;
+    }
+    indexed_transaction_set::nth_index<3>::type::reverse_iterator rit = mapTx.get<3>().rbegin();
+    if (rit !=  mapTx.get<3>().rend())
+        LogPrintf("Cheapest fee %s\n",CFeeRate(rit->GetModifiedFee(), rit->GetTxSize()).ToString());
+}
+
 bool CTxMemPool::CalculateMemPoolAncestors(const CTxMemPoolEntry &entry, setEntries &setAncestors, uint64_t limitAncestorCount, uint64_t limitAncestorSize, uint64_t limitDescendantCount, uint64_t limitDescendantSize, std::string &errString, bool fSearchForParents /* = true */) const
 {
     setEntries parentHashes;
@@ -360,6 +405,7 @@ CTxMemPool::CTxMemPool(const CFeeRate& _minReasonableRelayFee) :
 
     minerPolicyEstimator = new CBlockPolicyEstimator(_minReasonableRelayFee);
     minReasonableRelayFee = _minReasonableRelayFee;
+    lastStatsTime = 0;
 }
 
 CTxMemPool::~CTxMemPool()
