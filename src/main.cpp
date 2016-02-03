@@ -776,7 +776,8 @@ static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, in
 
 static bool EvaluateSequenceLocks(const CBlockIndex& block, std::pair<int, int64_t> lockPair)
 {
-    int64_t nBlockTime = block.pprev ? block.pprev->GetMedianTimePast() : 0;
+    assert(block.pprev);
+    int64_t nBlockTime = block.pprev->GetMedianTimePast();
     if (lockPair.first >= block.nHeight || lockPair.second >= nBlockTime)
         return false;
 
