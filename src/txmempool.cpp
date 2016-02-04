@@ -187,21 +187,24 @@ void CTxMemPool::mempoolstats() {
     LogPrintf("Mempool Size: %u\tBytes: %u\tUsage: %u\tMinFeeRate: %s\n",totaltxs,mempool.GetTotalTxSize(),totalsize,CFeeRate(rollingMinimumFeeRate).ToString());
     size_t counter = 0;
     CFeeRate max = CFeeRate(0);
+    uint256 maxhash;
     indexed_transaction_set::nth_index<2>::type::iterator it = mapTx.get<2>().begin();
     while (it != mapTx.get<2>().end() && counter < totaltxs/10) {
         CFeeRate cur = CFeeRate(it->GetModifiedFee(), it->GetTxSize());
-        if (cur > max && it->WasClearAtEntry())
+        if (cur > max && it->WasClearAtEntry()) {
             max = cur;
+            maxhash = it->GetTx().GetHash();
+        }
         it++;
         counter++;
     }
     if (it != mapTx.get<2>().end())
-        LogPrintf("Oldest 10 pct of txs, age > %ld and max fee %s\n", lastStatsTime - it->GetTime(), max.ToString());
+        LogPrintf("Oldest 10 pct of txs, age > %ld and max fee %s %s\n", lastStatsTime - it->GetTime(), max.ToString(), maxhash.ToString());
     size_t sizecounter = 0;
     int decile = 1;
     indexed_transaction_set::nth_index<3>::type::iterator it3 = mapTx.get<3>().begin();
     if (it3 != mapTx.get<3>().end())
-        LogPrintf("CachedInnerUsage: %u Most expensive fee %s\n",cachedInnerUsage,CFeeRate(it3->GetModifiedFee(), it3->GetTxSize()).ToString());
+        LogPrintf("CachedInnerUsage: %u Most expensive fee %s %s\n",cachedInnerUsage,CFeeRate(it3->GetModifiedFee(), it3->GetTxSize()).ToString(), it3->GetTx().GetHash().ToString());
     while (it3 != mapTx.get<3>().end()) {
         sizecounter += it3->DynamicMemoryUsage();
         if (sizecounter > decile * cachedInnerUsage / 40) {
@@ -213,7 +216,7 @@ void CTxMemPool::mempoolstats() {
     }
     indexed_transaction_set::nth_index<3>::type::reverse_iterator rit = mapTx.get<3>().rbegin();
     if (rit !=  mapTx.get<3>().rend())
-        LogPrintf("Cheapest fee %s\n",CFeeRate(rit->GetModifiedFee(), rit->GetTxSize()).ToString());
+        LogPrintf("Cheapest fee %s %s\n",CFeeRate(rit->GetModifiedFee(), rit->GetTxSize()).ToString(), rit->GetTx().GetHash().ToString());
 }
 
 bool CTxMemPool::CalculateMemPoolAncestors(const CTxMemPoolEntry &entry, setEntries &setAncestors, uint64_t limitAncestorCount, uint64_t limitAncestorSize, uint64_t limitDescendantCount, uint64_t limitDescendantSize, std::string &errString, bool fSearchForParents /* = true */) const
