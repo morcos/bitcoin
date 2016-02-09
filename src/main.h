@@ -357,6 +357,9 @@ bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeig
  * Check if transaction will be BIP 68 final in the next block to be created.
  *
  * Calls SequenceLocks() with data from the tip of the current active chain.
+ * Optionally stores in LockPoints the resulting height and time calculated and the hash
+ * of the block needed for calculation or skips the calculation and uses the LockPoints
+ * passed in for evaluation.
  *
  * See consensus/consensus.h for flag definitions.
  */
