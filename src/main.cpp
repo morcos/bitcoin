@@ -774,11 +774,9 @@ static std::pair<int, int64_t> CalculateSequenceLocks(const CTransaction &tx, in
     return std::make_pair(nMinHeight, nMinTime);
 }
 
-static bool EvaluateSequenceLocks(const CBlockIndex& block, std::pair<int, int64_t> lockPair)
+static bool EvaluateSequenceLocks(int blockHeight, int64_t blockTime, std::pair<int, int64_t> lockPair)
 {
-    assert(block.pprev);
-    int64_t nBlockTime = block.pprev->GetMedianTimePast();
-    if (lockPair.first >= block.nHeight || lockPair.second >= nBlockTime)
+    if (lockPair.first >= blockHeight || lockPair.second >= blockTime)
         return false;
 
     return true;
@@ -786,7 +784,9 @@ static bool EvaluateSequenceLocks(const CBlockIndex& block, std::pair<int, int64
 
 bool SequenceLocks(const CTransaction &tx, int flags, std::vector<int>* prevHeights, const CBlockIndex& block)
 {
-    return EvaluateSequenceLocks(block, CalculateSequenceLocks(tx, flags, prevHeights, block));
+    assert(block.pprev);
+    int64_t nBlockTime = block.pprev->GetMedianTimePast();
+    return EvaluateSequenceLocks(block.nHeight, nBlockTime, CalculateSequenceLocks(tx, flags, prevHeights, block));
 }
 
 bool CheckSequenceLocks(const CTransaction &tx, int flags)
@@ -794,15 +794,6 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags)
     AssertLockHeld(cs_main);
 
     CBlockIndex* tip = chainActive.Tip();
-    CBlockIndex index;
-    index.pprev = tip;
-    // CheckSequenceLocks() uses chainActive.Height()+1 to evaluate
-    // height based locks because when SequenceLocks() is called within
-    // CBlock::AcceptBlock(), the height of the block *being*
-    // evaluated is what is used. Thus if we want to know if a
-    // transaction can be part of the *next* block, we need to call
-    // SequenceLocks() with one more than chainActive.Height().
-    index.nHeight = tip->nHeight + 1;
 
     // pcoinsTip contains the UTXO set for chainActive.Tip()
     CCoinsViewMemPool viewMemPool(pcoinsTip, mempool);
@@ -822,8 +813,19 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags)
         }
     }
 
+    // Construct an index as if a new block was being added
+    CBlockIndex index;
+    index.pprev = tip;
+    index.nHeight = tip->nHeight + 1;
     std::pair<int, int64_t> lockPair = CalculateSequenceLocks(tx, flags, &prevheights, index);
-    return EvaluateSequenceLocks(index, lockPair);
+
+    // CheckSequenceLocks() uses chainActive.Height()+1 to evaluate
+    // height based locks because when SequenceLocks() is called within
+    // CBlock::AcceptBlock(), the height of the block *being*
+    // evaluated is what is used. Thus if we want to know if a
+    // transaction can be part of the *next* block, we need to call
+    // SequenceLocks() with one more than chainActive.Height().
+    return EvaluateSequenceLocks(tip->nHeight+1, tip->GetMedianTimePast(), lockPair);
 }
 
 
