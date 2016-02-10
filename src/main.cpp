@@ -857,6 +857,22 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints* lp, bool 
             // Limit to current chain height in the case of mempool txs
             int maxInputHeight = std::min(*std::max_element(prevheights.begin(), prevheights.end()), tip->nHeight);
             lp->maxInputHash = tip->GetAncestor(maxInputHeight)->GetBlockHash();
+
+            // In the event we are caching LockPoints we should specifically
+            // check that there are no relative sequence locks > 0 for unconfirmed
+            // inputs (either height or time based).  Otherwise the LockPoints
+            // would not be able to store a valid maxInputHash.
+            // Approximate this by setting prevheights to 1 for all non-mempool txs
+            // and recalculating and testing sequence locks.
+            for (size_t txinIndex = 0; txinIndex < prevheights.size(); txinIndex++) {
+                if (prevheights[txinIndex] != tip->nHeight + 1) {
+                    prevheights[txinIndex] = 1;
+                }
+            }
+            std::pair<int, int64_t> mempoolLockPair = CalculateSequenceLocks(tx, flags, &prevheights, index);
+            if (!EvaluateSequenceLocks(tip->nHeight+1, tip->GetMedianTimePast(), mempoolLockPair)) {
+                return false;
+            }
         }
     }
 
@@ -866,6 +882,10 @@ bool CheckSequenceLocks(const CTransaction &tx, int flags, LockPoints* lp, bool 
     // evaluated is what is used. Thus if we want to know if a
     // transaction can be part of the *next* block, we need to call
     // SequenceLocks() with one more than chainActive.Height().
+    // In the future this may be changed to permit sequence locked transactions
+    // that will be valid by a time and height in the future.
+    // If this happens, CreateNewBlock must call EvaluateSequenceLocks on
+    // every transaction to verify it's final.
     return EvaluateSequenceLocks(tip->nHeight+1, tip->GetMedianTimePast(), lockPair);
 }
 
