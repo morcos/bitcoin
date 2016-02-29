@@ -83,9 +83,34 @@ void TxConfirmStat::Read(CAutoFile& filein, int version)
 }
 void TxConfirmStat::DebugPrint(unsigned int nBlockHeight)
 {
-    if (confAvg.size() >= 16) {
+    if (confAvg.size() >= 1000) {
         for (unsigned int j = 0; j < buckets.size(); j++) {
-            fprintf(stdout,"%s Bucket %12.5g: %12.2f txs, %6.2f%%:1, %6.2f%%:2, %6.2f%%:3, %6.2f%%:4, %6.2f%%:8 %6.2f%%:16 avg %12.5g\n",
+            fprintf(stdout,"%s Bucket %12.5g: %12.2f txs, %4.0f%%:1, %4.0f%%:2, %4.0f%%:3, %4.0f%%:4, %4.0f%%:8 %4.0f%%:16 %4.0f%%:32 %4.0f%%:64 %4.0f%%:128 %4.0f%%:256 %4.0f%%:512 %4.0f%%:1000 avg %12.5g\n",
+                    dataTypeString.c_str(), buckets[j], txCtAvg[j]*(1-decay),
+                     100*confAvg[1-1][j]/txCtAvg[j], 100*confAvg[2-1][j]/txCtAvg[j],
+                     100*confAvg[3-1][j]/txCtAvg[j], 100*confAvg[4-1][j]/txCtAvg[j],
+                     100*confAvg[8-1][j]/txCtAvg[j], 100*confAvg[16-1][j]/txCtAvg[j],
+                     100*confAvg[32-1][j]/txCtAvg[j], 100*confAvg[64-1][j]/txCtAvg[j],
+                     100*confAvg[128-1][j]/txCtAvg[j], 100*confAvg[256-1][j]/txCtAvg[j],
+                     100*confAvg[512-1][j]/txCtAvg[j], 100*confAvg[1000-1][j]/txCtAvg[j],
+                     avg[j]/txCtAvg[j]);
+        }
+    }
+    else if (confAvg.size() >= 256) {
+        for (unsigned int j = 0; j < buckets.size(); j++) {
+            fprintf(stdout,"%s Bucket %12.5g: %12.2f txs, %4.0f%%:1, %4.0f%%:2, %4.0f%%:3, %4.0f%%:4, %4.0f%%:8 %4.0f%%:16 %4.0f%%:32 %4.0f%%:64 %4.0f%%:128 %4.0f%%:256 avg %12.5g\n",
+                    dataTypeString.c_str(), buckets[j], txCtAvg[j]*(1-decay),
+                    100*confAvg[1-1][j]/txCtAvg[j], 100*confAvg[2-1][j]/txCtAvg[j],
+                    100*confAvg[3-1][j]/txCtAvg[j], 100*confAvg[4-1][j]/txCtAvg[j],
+                    100*confAvg[8-1][j]/txCtAvg[j], 100*confAvg[16-1][j]/txCtAvg[j],
+                    100*confAvg[32-1][j]/txCtAvg[j], 100*confAvg[64-1][j]/txCtAvg[j],
+                    100*confAvg[128-1][j]/txCtAvg[j], 100*confAvg[256-1][j]/txCtAvg[j],
+                    avg[j]/txCtAvg[j]);
+        }
+    }
+    else if (confAvg.size() >= 16) {
+        for (unsigned int j = 0; j < buckets.size(); j++) {
+            fprintf(stdout,"%s Bucket %12.5g: %12.2f txs, %4.0f%%:1, %4.0f%%:2, %4.0f%%:3, %4.0f%%:4, %4.0f%%:8 %4.0f%%:16 avg %12.5g\n",
                     dataTypeString.c_str(), buckets[j], txCtAvg[j]*(1-decay),
                      100*confAvg[1-1][j]/txCtAvg[j], 100*confAvg[2-1][j]/txCtAvg[j],
                      100*confAvg[3-1][j]/txCtAvg[j], 100*confAvg[4-1][j]/txCtAvg[j],

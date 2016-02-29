@@ -395,7 +395,8 @@ bitcoin_tx_LDADD += $(BOOST_LIBS) $(CRYPTO_LIBS)
 
 # feetool binary #
 feetool_SOURCES = feetool.cpp
-feetool_CPPFLAGS = $(BITCOIN_INCLUDES)
+feetool_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+feetool_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 feetool_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
 feetool_LDADD = \
