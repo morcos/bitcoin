@@ -13,6 +13,7 @@
 
 #include <boost/thread.hpp>
 #include <boost/unordered_set.hpp>
+#include <boost/lockfree/queue.hpp>
 
 namespace {
 
@@ -41,10 +42,10 @@ private:
     typedef boost::unordered_set<uint256, CSignatureCacheHasher> map_type;
     map_type setValid;
     boost::shared_mutex cs_sigcache;
-
+    boost::lockfree::queue<uint256> deleteQueue;
 
 public:
-    CSignatureCache()
+    CSignatureCache() : deleteQueue(10000)
     {
         GetRandBytes(nonce.begin(), 32);
     }
@@ -56,16 +57,16 @@ public:
     }
 
     bool
-    Get(const uint256& entry)
+    Get(const uint256& entry, bool erase)
     {
         boost::shared_lock<boost::shared_mutex> lock(cs_sigcache);
-        return setValid.count(entry);
-    }
+        if (!setValid.count(entry))
+            return false;
 
-    void Erase(const uint256& entry)
-    {
-        boost::unique_lock<boost::shared_mutex> lock(cs_sigcache);
-        setValid.erase(entry);
+        if (erase)
+            deleteQueue.push(entry);
+
+        return true;
     }
 
     void Set(const uint256& entry)
@@ -74,6 +75,13 @@ public:
         if (nMaxCacheSize <= 0) return;
 
         boost::unique_lock<boost::shared_mutex> lock(cs_sigcache);
+
+        // Delete previous entries
+        uint256 oldEntry;
+        while (deleteQueue.unsynchronized_pop(oldEntry)) {
+            setValid.erase(oldEntry);
+        }
+
         while (memusage::DynamicUsage(setValid) > nMaxCacheSize)
         {
             map_type::size_type s = GetRand(setValid.bucket_count());
@@ -96,10 +104,7 @@ bool CachingTransactionSignatureChecker::VerifySignature(const std::vector<unsig
     uint256 entry;
     signatureCache.ComputeEntry(entry, sighash, vchSig, pubkey);
 
-    if (signatureCache.Get(entry)) {
-        if (!store) {
-            signatureCache.Erase(entry);
-        }
+    if (signatureCache.Get(entry, !store)) {
         return true;
     }
 
