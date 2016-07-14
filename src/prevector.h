@@ -250,16 +250,16 @@ public:
     }
 
     prevector() : _size(0) {
-        static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
+        //static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
     }
 
     explicit prevector(size_type n) : _size(0) {
-        static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
+        //static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
         resize(n);
     }
 
     explicit prevector(size_type n, const T& val = T()) : _size(0) {
-        static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
+        //static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
         change_capacity(n);
         while (size() < n) {
             _size++;
@@ -269,7 +269,7 @@ public:
 
     template<typename InputIterator>
     prevector(InputIterator first, InputIterator last) : _size(0) {
-        static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
+        //static_assert(std::is_trivially_copyable<T>::value, "prevector may only be used with trivial types");
         size_type n = last - first;
         change_capacity(n);
         while (first != last) {
