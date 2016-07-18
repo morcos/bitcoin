@@ -218,6 +218,8 @@ void Shutdown()
         }
         delete pcoinsTip;
         pcoinsTip = NULL;
+        delete tipCache;
+        tipCache = NULL;
         delete pcoinscatcher;
         pcoinscatcher = NULL;
         delete pcoinsdbview;
@@ -1240,6 +1242,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
         do {
             try {
                 UnloadBlockIndex();
+                delete tipCache;
                 delete pcoinsTip;
                 delete pcoinsdbview;
                 delete pcoinscatcher;
@@ -1249,6 +1252,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex || fReindexChainState);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
                 pcoinsTip = new CCoinsViewCache(pcoinscatcher);
+                tipCache = new CCoinsViewCache(pcoinsTip);
 
                 if (fReindex) {
                     pblocktree->WriteReindexing(true);

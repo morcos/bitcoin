@@ -452,6 +452,8 @@ public:
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
     bool Flush();
+    bool Write();
+    void DangerousErase();
 
     /**
      * Removes the transaction with the given hash from the cache, if it is

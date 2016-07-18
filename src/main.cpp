@@ -4,6 +4,8 @@
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include "main.h"
+#include "miner.h"
+#include <unordered_set>
 
 #include "addrman.h"
 #include "arith_uint256.h"
@@ -673,6 +675,7 @@ CBlockIndex* FindForkInGlobalIndex(const CChain& chain, const CBlockLocator& loc
 }
 
 CCoinsViewCache *pcoinsTip = NULL;
+CCoinsViewCache *tipCache = NULL;
 CBlockTreeDB *pblocktree = NULL;
 
 //////////////////////////////////////////////////////////////////////////////
@@ -2718,11 +2721,11 @@ void static UpdateTip(CBlockIndex *pindexNew, const CChainParams& chainParams) {
             }
         }
     }
-    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utx)", __func__,
+    LogPrintf("%s: new best=%s height=%d version=0x%08x log2_work=%.8g tx=%lu date='%s' progress=%f cache=%.1fMiB(%utx) tipcache=%.1fMiB(%utx)", __func__,
       chainActive.Tip()->GetBlockHash().ToString(), chainActive.Height(), chainActive.Tip()->nVersion,
       log(chainActive.Tip()->nChainWork.getdouble())/log(2.0), (unsigned long)chainActive.Tip()->nChainTx,
       DateTimeStrFormat("%Y-%m-%d %H:%M:%S", chainActive.Tip()->GetBlockTime()),
-      Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+      Checkpoints::GuessVerificationProgress(chainParams.Checkpoints(), chainActive.Tip()), pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize(), tipCache->DynamicMemoryUsage() * (1.0 / (1<<20)), tipCache->GetCacheSize());
     if (!warningMessages.empty())
         LogPrintf(" warning='%s'", boost::algorithm::join(warningMessages, ", "));
     LogPrintf("\n");
@@ -2742,9 +2745,14 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
     int64_t nStart = GetTimeMicros();
     {
         CCoinsViewCache view(pcoinsTip);
-        if (!DisconnectBlock(block, state, pindexDelete, view))
+        if (!DisconnectBlock(block, state, pindexDelete, view)) {
+            tipCache->DangerousErase();
+            tipCache->SetBestBlock(pcoinsTip->GetBestBlock());
             return error("DisconnectTip(): DisconnectBlock %s failed", pindexDelete->GetBlockHash().ToString());
+        }
         assert(view.Flush());
+        tipCache->DangerousErase();
+        tipCache->SetBestBlock(pcoinsTip->GetBestBlock());
     }
     LogPrint("bench", "- Disconnect block: %.2fms\n", (GetTimeMicros() - nStart) * 0.001);
     // Write the chain state to disk, if necessary.
@@ -2785,6 +2793,7 @@ bool static DisconnectTip(CValidationState& state, const CChainParams& chainpara
 static int64_t nTimeReadFromDisk = 0;
 static int64_t nTimeConnectTotal = 0;
 static int64_t nTimeFlush = 0;
+static int64_t nTimeErase = 0;
 static int64_t nTimeChainState = 0;
 static int64_t nTimePostConnect = 0;
 
@@ -2808,10 +2817,13 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     int64_t nTime3;
     LogPrint("bench", "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * 0.001, nTimeReadFromDisk * 0.000001);
     {
-        CCoinsViewCache view(pcoinsTip);
-        bool rv = ConnectBlock(*pblock, state, pindexNew, view, chainparams);
+        bool rv = ConnectBlock(*pblock, state, pindexNew, *tipCache, chainparams);
         GetMainSignals().BlockChecked(*pblock, state);
         if (!rv) {
+            tipCache->DangerousErase(); // FIX: dangerous to remember we have to erase this
+            // But tipCache must be erased after anything was connected to it..
+            // maybe we do it somewhere else entirely
+            // or mark it dirty and check it when we want to use it (warming or connecting)
             if (state.IsInvalid())
                 InvalidBlockFound(pindexNew, state);
             return error("ConnectTip(): ConnectBlock %s failed", pindexNew->GetBlockHash().ToString());
@@ -2819,10 +2831,13 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         mapBlockSource.erase(pindexNew->GetBlockHash());
         nTime3 = GetTimeMicros(); nTimeConnectTotal += nTime3 - nTime2;
         LogPrint("bench", "  - Connect total: %.2fms [%.2fs]\n", (nTime3 - nTime2) * 0.001, nTimeConnectTotal * 0.000001);
-        assert(view.Flush());
+        assert(tipCache->Write());
     }
-    int64_t nTime4 = GetTimeMicros(); nTimeFlush += nTime4 - nTime3;
-    LogPrint("bench", "  - Flush: %.2fms [%.2fs]\n", (nTime4 - nTime3) * 0.001, nTimeFlush * 0.000001);
+    int64_t nTime3a = GetTimeMicros(); nTimeFlush += nTime3a - nTime3;
+    LogPrint("bench", "  - Write: %.2fms [%.2fs]\n", (nTime3a - nTime3) * 0.001, nTimeFlush * 0.000001);
+    tipCache->DangerousErase();
+    int64_t nTime4 = GetTimeMicros(); nTimeErase += nTime4 - nTime3a;
+    LogPrint("bench", "  - Erase: %.2fms [%.2fs]\n", (nTime4 - nTime3a) * 0.001, nTimeErase * 0.000001);
     // Write the chain state to disk, if necessary.
     if (!FlushStateToDisk(state, FLUSH_STATE_IF_NEEDED))
         return false;
@@ -3761,6 +3776,36 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, C
         return error("%s: ActivateBestChain failed", __func__);
 
     return true;
+}
+void WarmTipCache(const CChainParams& chainparams)
+{
+    static int64_t lastBlockCreateTime = 0;
+    int64_t timeNow = GetTime();
+    if (timeNow > lastBlockCreateTime + 30) {  // FIX: magic value
+        LogPrint("coinsdb", "Creating new block at %ld: cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
+                 timeNow, pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize(), tipCache->DynamicMemoryUsage() * (1.0 / (1<<20)), tipCache->GetCacheSize()); // FIX: too much logging
+
+        int64_t start = GetTimeMicros();
+        BlockAssembler assembler(chainparams);
+        CBlockTemplate* blocktemplate(assembler.CreateNewBlock(CScript(), false));
+        int64_t mid = GetTimeMicros();
+        std::unordered_set<uint256, BlockHasher> inBlock(5000);
+        BOOST_FOREACH(CTransaction &tx, blocktemplate->block.vtx) {
+            if (!tx.IsCoinBase()) {
+                inBlock.insert(tx.GetHash());
+                BOOST_FOREACH(const CTxIn &txin, tx.vin) {
+                    if (!inBlock.count(txin.prevout.hash))
+                        tipCache->HaveCoins(txin.prevout.hash);
+                }
+            }
+        }
+        int64_t end = GetTimeMicros();
+        delete blocktemplate; // FIX: not the most efficient to have to delete this every time
+        int64_t end2 = GetTimeMicros();
+        LogPrintf("Block created in %ld us, cache populated in %ld us, template erased in %ld us: cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
+                  mid-start,end-mid,end2-end,pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize(), tipCache->DynamicMemoryUsage() * (1.0 / (1<<20)), tipCache->GetCacheSize());  // FIX: too much logging
+        lastBlockCreateTime = timeNow;
+    }
 }
 
 bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot)
@@ -5514,6 +5559,7 @@ bool static ProcessMessage(CNode* pfrom, string strCommand, CDataStream& vRecv, 
 
             BOOST_FOREACH(uint256 hash, vEraseQueue)
                 EraseOrphanTx(hash);
+            WarmTipCache(chainparams);
         }
         else if (fMissingInputs)
         {
