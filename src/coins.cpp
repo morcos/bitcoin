@@ -176,6 +176,8 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn
                 if (!(it->second.flags & CCoinsCacheEntry::FRESH && it->second.coins.IsPruned())) {
                     // Otherwise we will need to create it in the parent
                     // and move the data up and mark it as dirty
+                    cacheCoins.insert(std::make_pair(it->first, std::move(it->second)));
+/*
                     CCoinsCacheEntry& entry = cacheCoins[it->first];
                     entry.coins.swap(it->second.coins);
                     cachedCoinsUsage += entry.coins.DynamicMemoryUsage();
@@ -185,6 +187,7 @@ bool CCoinsViewCache::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlockIn
                     // and already exist in the grandparent
                     if (it->second.flags & CCoinsCacheEntry::FRESH)
                         entry.flags |= CCoinsCacheEntry::FRESH;
+*/
                 }
             } else {
                 // Found the entry in the parent cache
