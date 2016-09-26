@@ -292,6 +292,7 @@ struct CCoinsCacheEntry
     enum Flags {
         DIRTY = (1 << 0), // This cache entry is potentially different from the version in the parent view.
         FRESH = (1 << 1), // The parent view does not have this entry (or it is pruned).
+        HOT = (1 << 2), // Do not erase this hash
     };
 
     CCoinsCacheEntry() : coins(), flags(0) {}
@@ -336,8 +337,8 @@ public:
 
     //! Do a bulk modification (multiple CCoins changes + BestBlock change).
     //! The passed mapCoins can be modified.
-    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
-
+    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool eraseCache = true);
+    virtual bool PartBatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool eraseCache, size_t &mapUsage);
     //! Get a cursor to iterate over the whole state
     virtual CCoinsViewCursor *Cursor() const;
 
@@ -358,7 +359,7 @@ public:
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
     void SetBackend(CCoinsView &viewIn);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool eraseCache = true);
     CCoinsViewCursor *Cursor() const;
 };
 
@@ -412,8 +413,10 @@ public:
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
     void SetBestBlock(const uint256 &hashBlock);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
-
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool eraseCache = true);
+    bool PartBatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, bool eraseCache, size_t &mapUsage);
+    bool HaveHotCoins(const uint256 &txid);
+    void ResetUsage();
     /**
      * Check if we have the given tx already loaded in this cache.
      * The semantics are the same as HaveCoins(), but no calls to
@@ -494,6 +497,7 @@ public:
 private:
     CCoinsMap::iterator FetchCoins(const uint256 &txid);
     CCoinsMap::const_iterator FetchCoins(const uint256 &txid) const;
+    CCoinsMap::const_iterator FetchHotCoins(const uint256 &txid) const;
 
     /**
      * By making the copy constructor private, we prevent accidentally using it when one intends to create a cache on top of a base cache.

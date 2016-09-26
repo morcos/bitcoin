@@ -2835,7 +2835,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     }
     int64_t nTime3a = GetTimeMicros(); nTimeFlush += nTime3a - nTime3;
     LogPrint("bench", "  - Write: %.2fms [%.2fs]\n", (nTime3a - nTime3) * 0.001, nTimeFlush * 0.000001);
-    tipCache->DangerousErase();
+    //tipCache->ResetUsage();
     int64_t nTime4 = GetTimeMicros(); nTimeErase += nTime4 - nTime3a;
     LogPrint("bench", "  - Erase: %.2fms [%.2fs]\n", (nTime4 - nTime3a) * 0.001, nTimeErase * 0.000001);
     // Write the chain state to disk, if necessary.
@@ -3795,7 +3795,7 @@ void WarmTipCache(const CChainParams& chainparams)
                 inBlock.insert(tx.GetHash());
                 BOOST_FOREACH(const CTxIn &txin, tx.vin) {
                     if (!inBlock.count(txin.prevout.hash))
-                        tipCache->HaveCoins(txin.prevout.hash);
+                        tipCache->HaveHotCoins(txin.prevout.hash);
                 }
             }
         }
