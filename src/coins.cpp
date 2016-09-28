@@ -289,6 +289,7 @@ bool CCoinsViewCache::PartBatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlo
                     // it from the parent.
                     cachedCoinsUsage -= itUs->second.coins.DynamicMemoryUsage();
                     cacheCoins.erase(itUs);
+                    mapUsage -= it->second.coins.DynamicMemoryUsage();
                 } else {
                     // A normal modification.
                     cachedCoinsUsage -= itUs->second.coins.DynamicMemoryUsage();
