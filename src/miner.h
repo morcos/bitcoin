@@ -177,7 +177,7 @@ private:
     /** Add transactions based on tx "priority" */
     void addPriorityTxs();
     /** Add transactions based on feerate including unconfirmed ancestors */
-    void addPackageTxs();
+    void addPackageTxs(bool failFast);
 
     // helper function for addPriorityTxs
     /** Test if tx will still "fit" in the block */

@@ -163,7 +163,7 @@ CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bo
     fIncludeWitness = IsWitnessEnabled(pindexPrev, chainparams.GetConsensus());
 
     addPriorityTxs();
-    addPackageTxs();
+    addPackageTxs(!validate);
 
     nLastBlockTx = nBlockTx;
     nLastBlockSize = nBlockSize;
@@ -395,7 +395,7 @@ void BlockAssembler::SortForBlock(const CTxMemPool::setEntries& package, CTxMemP
 // Each time through the loop, we compare the best transaction in
 // mapModifiedTxs with the next transaction in the mempool to decide what
 // transaction package to work on next.
-void BlockAssembler::addPackageTxs()
+void BlockAssembler::addPackageTxs(bool failFast)
 {
     // mapModifiedTx will store sorted packages after they are modified
     // because some of their txs are already in the block
@@ -499,6 +499,9 @@ void BlockAssembler::addPackageTxs()
             // Erase from the modified set, if present
             mapModifiedTx.erase(sortedEntries[i]);
         }
+
+        if (failFast && nBlockWeight >= nBlockMaxWeight - WITNESS_SCALE_FACTOR * 100000)
+            return;
 
         // Update transactions that depend on each of these
         UpdatePackagesForAdded(ancestors, mapModifiedTx);
