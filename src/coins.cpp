@@ -291,22 +291,15 @@ double CCoinsViewCache::GetPriority(const CTransaction &tx, int nHeight, CAmount
     return tx.ComputePriority(dResult);
 }
 
-CCoinsViewUndoCache::CCoinsViewUndoCache(CCoinsView *baseIn) : CCoinsViewCache(baseIn), hasUndoState(false), mustCommit(false) {}
+CCoinsViewUndoCache::CCoinsViewUndoCache(CCoinsView *baseIn) : CCoinsViewCache(baseIn), undoEnabled() {}
 
 CCoinsViewUndoCache::~CCoinsViewUndoCache()
 {
-    assert(!hasUndoState);
-}
-
-void CCoinsViewUndoCache::Commit() {
-    undoCoins.clear();
-    eraseCoins.clear();
-    hasUndoState = false;
-    mustCommit = false;
+    assert(!undoEnabled);
 }
 
 void CCoinsViewUndoCache::Undo() {
-    assert(!mustCommit);
+    assert(undoEnabled);
     for (CCoinsMap::iterator it = undoCoins.begin(); it != undoCoins.end(); it++) {
         std::pair<CCoinsMap::iterator, bool> cacheret = cacheCoins.insert(std::make_pair(it->first, CCoinsCacheEntry()));
         if (!cacheret.second) { //remove usage of coins currently in cache
@@ -325,7 +318,10 @@ void CCoinsViewUndoCache::Undo() {
         }
     }
     eraseCoins.clear();
-    hasUndoState = false;
+    if (!oldHashBlock.IsNull())
+        CCoinsViewCache::SetBestBlock(oldHashBlock);
+    oldHashBlock.SetNull();
+    undoEnabled = false;
 }
 
 void CCoinsViewUndoCache::SaveUndoState(std::pair<CCoinsMap::iterator, bool> ret) {
@@ -343,8 +339,15 @@ void CCoinsViewUndoCache::SaveUndoState(std::pair<CCoinsMap::iterator, bool> ret
     }
 }
 
+void CCoinsViewUndoCache::SetBestBlock(const uint256 &hashBlockIn) {
+    //Save hashBlock if we might still undo
+    if (undoEnabled && oldHashBlock.IsNull())
+        oldHashBlock = hashBlock;
+    CCoinsViewCache::SetBestBlock(hashBlockIn);
+}
+
 CCoinsModifier CCoinsViewUndoCache::ModifyCoins(const uint256 &txid) {
-    hasUndoState = true;
+    assert(undoEnabled);
     assert(!hasModifier);
     std::pair<CCoinsMap::iterator, bool> ret = cacheCoins.insert(std::make_pair(txid, CCoinsCacheEntry()));
     SaveUndoState(ret);
@@ -352,11 +355,24 @@ CCoinsModifier CCoinsViewUndoCache::ModifyCoins(const uint256 &txid) {
 }
 
 CCoinsModifier CCoinsViewUndoCache::ModifyNewCoins(const uint256 &txid, bool coinbase) {
-    hasUndoState = true;
+    assert(undoEnabled);
     assert(!hasModifier);
     std::pair<CCoinsMap::iterator, bool> ret = cacheCoins.insert(std::make_pair(txid, CCoinsCacheEntry()));
     SaveUndoState(ret);
     return ModifyNewCoins_impl(ret, coinbase);
+}
+
+CCoinsUndoEnabler::CCoinsUndoEnabler(CCoinsViewUndoCache& cache_) : cache(cache_) {
+    assert(!cache.undoEnabled);
+    cache.undoEnabled = true;
+}
+
+CCoinsUndoEnabler::~CCoinsUndoEnabler()
+{
+    cache.undoCoins.clear();
+    cache.eraseCoins.clear();
+    cache.oldHashBlock.SetNull();
+    cache.undoEnabled = false;
 }
 
 CCoinsModifier::CCoinsModifier(CCoinsViewCache& cache_, CCoinsMap::iterator it_, size_t usage) : cache(cache_), it(it_), cachedCoinUsage(usage) {

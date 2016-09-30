@@ -386,6 +386,23 @@ public:
     friend class CCoinsViewCache;
 };
 
+class CCoinsViewUndoCache;
+
+/**
+ * A RAII helper class that enables recording undo informatin for a CCoinsViewUndoCache
+ * and ensures the undo information is deleted or applied after a limited scope leaving
+ * the CCoinsViewUndoCache in a consistent state;
+ */
+class CCoinsUndoEnabler
+{
+private:
+    CCoinsViewUndoCache& cache;
+
+public:
+    CCoinsUndoEnabler(CCoinsViewUndoCache& cache_);
+    ~CCoinsUndoEnabler();
+};
+
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
 class CCoinsViewCache : public CCoinsViewBacked
 {
@@ -508,52 +525,31 @@ class CCoinsViewUndoCache : public CCoinsViewCache
     CCoinsMap undoCoins;
     typedef std::unordered_set<uint256, SaltedTxidHasher> HashSet;
     HashSet eraseCoins;
-    bool hasUndoState;
-    bool mustCommit;
+    uint256 oldHashBlock;
+    bool undoEnabled;
 
 public:
-    //public functions shouldn't be called while we have undo state
-    bool GetCoins(const uint256 &txid, CCoins &coins) const {assert(!hasUndoState); return CCoinsViewCache::GetCoins(txid, coins);}
-    bool HaveCoins(const uint256 &txid) const {assert(!hasUndoState); return CCoinsViewCache::HaveCoins(txid);}
-    //uint256 GetBestBlock() const ok to call this, kept synced externally
-
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {assert(!hasUndoState); return CCoinsViewCache::BatchWrite(mapCoins, hashBlock);}
-    bool HaveCoinsInCache(const uint256 &txid) const {assert(!hasUndoState); return CCoinsViewCache::HaveCoinsInCache(txid);}
-    const CCoins* AccessCoins(const uint256 &txid) const {assert(!hasUndoState); return CCoinsViewCache::AccessCoins(txid);}
-    bool Flush() {assert(!hasUndoState); return CCoinsViewCache::Flush();}
-    void Uncache(const uint256 &txid) {assert(!hasUndoState); CCoinsViewCache::Uncache(txid);}
-    unsigned int GetCacheSize() const {assert(!hasUndoState); return CCoinsViewCache::GetCacheSize();}
-    size_t DynamicMemoryUsage() const {assert(!hasUndoState); return CCoinsViewCache::DynamicMemoryUsage();}
-    CAmount GetValueIn(const CTransaction& tx) const {assert(!hasUndoState); return CCoinsViewCache::GetValueIn(tx);}
-    bool HaveInputs(const CTransaction& tx) const {assert(!hasUndoState); return CCoinsViewCache::HaveInputs(tx);}
-    double GetPriority(const CTransaction &tx, int nHeight, CAmount &inChainInputValue) const {assert(!hasUndoState); return CCoinsViewCache::GetPriority(tx, nHeight, inChainInputValue);}
-    const CTxOut &GetOutputFor(const CTxIn& input) const {assert(!hasUndoState); return CCoinsViewCache::GetOutputFor(input);}
-
     CCoinsViewUndoCache(CCoinsView *baseIn);
     ~CCoinsViewUndoCache();
-    void Commit();
+
     void Undo();
 
-    void SetBestBlock(const uint256 &hashBlock) { mustCommit |= hasUndoState; CCoinsViewCache::SetBestBlock(hashBlock);}
+    /**
+     * Saves old hashBlock if undoEnabled before calling base class function.
+     */
+    void SetBestBlock(const uint256 &hashBlock);
 
-     /**
-     * Return a modifiable reference to a CCoins. If no entry with the given
-     * txid exists, a new one is created. Simultaneous modifications are not
-     * allowed.
+    /**
+     * Requires undoEnabled and stores undo information before calling base class function.
      */
     CCoinsModifier ModifyCoins(const uint256 &txid);
 
-    /**
-     * Return a modifiable reference to a CCoins. Assumes that no entry with the given
-     * txid exists and creates a new one. This saves a database access in the case where
-     * the coins were to be wiped out by FromTx anyway.  This should not be called with
-     * the 2 historical coinbase duplicate pairs because the new coins are marked fresh, and
-     * in the event the duplicate coinbase was spent before a flush, the now pruned coins
-     * would not properly overwrite the first coinbase of the pair. Simultaneous modifications
-     * are not allowed.
+     /**
+     * Requires undoEnabled and stores undo information before calling base class function.
      */
     CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
 
+    friend class CCoinsUndoEnabler;
 private:
     void SaveUndoState(std::pair<CCoinsMap::iterator, bool> ret);
 };
