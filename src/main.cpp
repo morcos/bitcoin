@@ -2809,6 +2809,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
     LogPrint("bench", "  - Load block from disk: %.2fms [%.2fs]\n", (nTime2 - nTime1) * 0.001, nTimeReadFromDisk * 0.000001);
     {
         //CCoinsViewCache view(pcoinsTip);
+        CCoinsUndoEnabler undoEnabled(*pcoinsTip);
         bool rv = ConnectBlock(*pblock, state, pindexNew, *pcoinsTip, chainparams);
         GetMainSignals().BlockChecked(*pblock, state);
         if (!rv) {
@@ -2820,8 +2821,7 @@ bool static ConnectTip(CValidationState& state, const CChainParams& chainparams,
         mapBlockSource.erase(pindexNew->GetBlockHash());
         nTime3 = GetTimeMicros(); nTimeConnectTotal += nTime3 - nTime2;
         LogPrint("bench", "  - Connect total: %.2fms [%.2fs]\n", (nTime3 - nTime2) * 0.001, nTimeConnectTotal * 0.000001);
-        pcoinsTip->Commit();
-//assert(view.Flush());
+        //assert(view.Flush());
     }
     int64_t nTime4 = GetTimeMicros(); nTimeFlush += nTime4 - nTime3;
     LogPrint("bench", "  - Flush: %.2fms [%.2fs]\n", (nTime4 - nTime3) * 0.001, nTimeFlush * 0.000001);
