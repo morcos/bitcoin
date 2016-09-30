@@ -496,7 +496,7 @@ bool ResetBlockFailureFlags(CBlockIndex *pindex);
 extern CChain chainActive;
 
 /** Global variable that points to the active CCoinsView (protected by cs_main) */
-extern CCoinsViewCache *pcoinsTip;
+extern CCoinsViewUndoCache *pcoinsTip;
 
 /** Global variable that points to the active block tree (protected by cs_main) */
 extern CBlockTreeDB *pblocktree;
