@@ -15,6 +15,7 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <unordered_set>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
@@ -411,7 +412,7 @@ public:
     bool GetCoins(const uint256 &txid, CCoins &coins) const;
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
-    void SetBestBlock(const uint256 &hashBlock);
+    virtual void SetBestBlock(const uint256 &hashBlock);
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
 
     /**
@@ -433,7 +434,7 @@ public:
      * txid exists, a new one is created. Simultaneous modifications are not
      * allowed.
      */
-    CCoinsModifier ModifyCoins(const uint256 &txid);
+    virtual CCoinsModifier ModifyCoins(const uint256 &txid);
 
     /**
      * Return a modifiable reference to a CCoins. Assumes that no entry with the given
@@ -444,7 +445,7 @@ public:
      * would not properly overwrite the first coinbase of the pair. Simultaneous modifications
      * are not allowed.
      */
-    CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
+    virtual CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
 
     /**
      * Push the modifications applied to this cache to its base.
@@ -492,11 +493,69 @@ public:
 private:
     CCoinsMap::iterator FetchCoins(const uint256 &txid);
     CCoinsMap::const_iterator FetchCoins(const uint256 &txid) const;
+protected:
+    CCoinsModifier ModifyCoins_impl(std::pair<CCoinsMap::iterator, bool> ret);
+    CCoinsModifier ModifyNewCoins_impl(std::pair<CCoinsMap::iterator, bool> ret, bool coinbase);
 
     /**
      * By making the copy constructor private, we prevent accidentally using it when one intends to create a cache on top of a base cache.
      */
     CCoinsViewCache(const CCoinsViewCache &);
+};
+
+class CCoinsViewUndoCache : public CCoinsViewCache
+{
+    CCoinsMap undoCoins;
+    typedef std::unordered_set<uint256, SaltedTxidHasher> HashSet;
+    HashSet eraseCoins;
+    bool hasUndoState;
+    bool mustCommit;
+
+public:
+    //public functions shouldn't be called while we have undo state
+    bool GetCoins(const uint256 &txid, CCoins &coins) const {assert(!hasUndoState); return CCoinsViewCache::GetCoins(txid, coins);}
+    bool HaveCoins(const uint256 &txid) const {assert(!hasUndoState); return CCoinsViewCache::HaveCoins(txid);}
+    //uint256 GetBestBlock() const ok to call this, kept synced externally
+
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {assert(!hasUndoState); return CCoinsViewCache::BatchWrite(mapCoins, hashBlock);}
+    bool HaveCoinsInCache(const uint256 &txid) const {assert(!hasUndoState); return CCoinsViewCache::HaveCoinsInCache(txid);}
+    const CCoins* AccessCoins(const uint256 &txid) const {assert(!hasUndoState); return CCoinsViewCache::AccessCoins(txid);}
+    bool Flush() {assert(!hasUndoState); return CCoinsViewCache::Flush();}
+    void Uncache(const uint256 &txid) {assert(!hasUndoState); CCoinsViewCache::Uncache(txid);}
+    unsigned int GetCacheSize() const {assert(!hasUndoState); return CCoinsViewCache::GetCacheSize();}
+    size_t DynamicMemoryUsage() const {assert(!hasUndoState); return CCoinsViewCache::DynamicMemoryUsage();}
+    CAmount GetValueIn(const CTransaction& tx) const {assert(!hasUndoState); return CCoinsViewCache::GetValueIn(tx);}
+    bool HaveInputs(const CTransaction& tx) const {assert(!hasUndoState); return CCoinsViewCache::HaveInputs(tx);}
+    double GetPriority(const CTransaction &tx, int nHeight, CAmount &inChainInputValue) const {assert(!hasUndoState); return CCoinsViewCache::GetPriority(tx, nHeight, inChainInputValue);}
+    const CTxOut &GetOutputFor(const CTxIn& input) const {assert(!hasUndoState); return CCoinsViewCache::GetOutputFor(input);}
+
+    CCoinsViewUndoCache(CCoinsView *baseIn);
+    ~CCoinsViewUndoCache();
+    void Commit();
+    void Undo();
+
+    void SetBestBlock(const uint256 &hashBlock) { mustCommit |= hasUndoState; CCoinsViewCache::SetBestBlock(hashBlock);}
+
+     /**
+     * Return a modifiable reference to a CCoins. If no entry with the given
+     * txid exists, a new one is created. Simultaneous modifications are not
+     * allowed.
+     */
+    CCoinsModifier ModifyCoins(const uint256 &txid);
+
+    /**
+     * Return a modifiable reference to a CCoins. Assumes that no entry with the given
+     * txid exists and creates a new one. This saves a database access in the case where
+     * the coins were to be wiped out by FromTx anyway.  This should not be called with
+     * the 2 historical coinbase duplicate pairs because the new coins are marked fresh, and
+     * in the event the duplicate coinbase was spent before a flush, the now pruned coins
+     * would not properly overwrite the first coinbase of the pair. Simultaneous modifications
+     * are not allowed.
+     */
+    CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
+
+private:
+    void SaveUndoState(std::pair<CCoinsMap::iterator, bool> ret);
 };
 
 #endif // BITCOIN_COINS_H
