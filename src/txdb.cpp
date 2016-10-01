@@ -61,10 +61,10 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         }
         count++;
         CCoinsMap::iterator itOld = it++;
-        if (!(it->second.flags & CCoinsCacheEntry::HOT))
+        if (!(itOld->second.flags & CCoinsCacheEntry::HOT))
             mapCoins.erase(itOld);
         else {
-            it->second.flags = 0;  //Clear all flags
+            itOld->second.flags = 0;  //Clear all flags
             hot++;
         }
     }
