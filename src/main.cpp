@@ -2699,8 +2699,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
                   pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
         nLastFlush = nNow;
         int64_t fcEnd = GetTimeMicros(); timeFlushCoins += fcEnd - fcStart;
-        if (fcEnd - fcStart > 100)
-            LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs]\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001);
+        LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs]\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001);
 
     }
     if (fDoFullFlush || ((mode == FLUSH_STATE_ALWAYS || mode == FLUSH_STATE_PERIODIC) && nNow > nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000)) {
@@ -2712,7 +2711,8 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         return AbortNode(state, std::string("System error while flushing: ") + e.what());
     }
     int64_t fEnd = GetTimeMicros(); timeFSTD += fEnd - fStart;
-    LogPrint("bench", "FSTD  - FlushStateToDisk: %.2fms [%.2fs]\n", (fEnd - fStart) * 0.001, timeFSTD * 0.000001);
+    if (fEnd - fStart > 100)
+        LogPrint("bench", "FSTD  - FlushStateToDisk: %.2fms [%.2fs]\n", (fEnd - fStart) * 0.001, timeFSTD * 0.000001);
 
     return true;
 }
