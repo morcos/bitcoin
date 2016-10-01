@@ -2692,7 +2692,8 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         if (!CheckDiskSpace(128 * 2 * 2 * pcoinsTip->GetCacheSize()))
             return state.Error("out of disk space");
         // Flush the chainstate (which may refer to block index entries).
-        WarmTipCache(Params());
+        if (chainActive.Tip())
+            WarmTipCache(Params());
         if (!pcoinsTip->HotFlush())
             return AbortNode(state, "Failed to write to coin database");
         LogPrintf("Cache flushed, new cache= %.1f MiB(%utx)\n",
