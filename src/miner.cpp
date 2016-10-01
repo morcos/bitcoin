@@ -462,7 +462,7 @@ void BlockAssembler::addPackageTxs(bool failFast)
             return;
         }
 
-        if (!TestPackage(packageSize, packageSigOpsCost)) {
+        if (!failFast && !TestPackage(packageSize, packageSigOpsCost)) {
             if (fUsingModified) {
                 // Since we always look at the best entry in mapModifiedTx,
                 // we must erase failed entries so that we can consider the
@@ -482,7 +482,7 @@ void BlockAssembler::addPackageTxs(bool failFast)
         ancestors.insert(iter);
 
         // Test if all tx's are Final
-        if (!TestPackageTransactions(ancestors)) {
+        if (!failFast && !TestPackageTransactions(ancestors)) {
             if (fUsingModified) {
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);
@@ -500,7 +500,7 @@ void BlockAssembler::addPackageTxs(bool failFast)
             mapModifiedTx.erase(sortedEntries[i]);
         }
 
-        if (failFast && nBlockWeight >= nBlockMaxWeight - WITNESS_SCALE_FACTOR * 100000)
+        if (failFast && nBlockWeight >= (nBlockMaxWeight * std::max((size_t)10,(nCoinCacheUsage >> 28))))
             return;
 
         // Update transactions that depend on each of these

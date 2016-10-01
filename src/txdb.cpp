@@ -63,8 +63,10 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         CCoinsMap::iterator itOld = it++;
         if (!(it->second.flags & CCoinsCacheEntry::HOT))
             mapCoins.erase(itOld);
-        else
+        else {
+            it->second.flags = 0;  //Clear all flags
             hot++;
+        }
     }
     if (!hashBlock.IsNull())
         batch.Write(DB_BEST_BLOCK, hashBlock);

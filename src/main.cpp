@@ -2548,6 +2548,35 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     return true;
 }
 
+static void WarmTipCache(const CChainParams& chainparams)
+{
+    int64_t start = GetTimeMicros();
+    int64_t hotHashes = 0;
+    int64_t missingHashes = 0;
+    BlockAssembler assembler(chainparams);
+    CBlockTemplate* blocktemplate(assembler.CreateNewBlock(CScript(), false));
+    int64_t mid = GetTimeMicros();
+    std::unordered_set<uint256, BlockHasher> inBlock(5000);
+    BOOST_FOREACH(CTransaction &tx, blocktemplate->block.vtx) {
+        if (!tx.IsCoinBase()) {
+            inBlock.insert(tx.GetHash());
+            BOOST_FOREACH(const CTxIn &txin, tx.vin) {
+                if (!inBlock.count(txin.prevout.hash)) {
+                    if (pcoinsTip->HotCoins(txin.prevout.hash))
+                        hotHashes++;
+                    else
+                        missingHashes++;
+                }
+            }
+        }
+    }
+    int64_t end = GetTimeMicros();
+    delete blocktemplate; // FIX: not the most efficient to have to delete this every time
+    int64_t end2 = GetTimeMicros();
+    LogPrintf("Block created in %ld us, %u hot hashes and %u missed in %ld us, template erased in %ld us: cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
+              mid-start,hotHashes,missingHashes,end-mid,end2-end,pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+}
+
 enum FlushStateMode {
     FLUSH_STATE_NONE,
     FLUSH_STATE_IF_NEEDED,
@@ -2643,8 +2672,11 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         if (!CheckDiskSpace(128 * 2 * 2 * pcoinsTip->GetCacheSize()))
             return state.Error("out of disk space");
         // Flush the chainstate (which may refer to block index entries).
-        if (!pcoinsTip->Flush())
+        WarmTipCache(Params());
+        if (!pcoinsTip->HotFlush())
             return AbortNode(state, "Failed to write to coin database");
+        LogPrintf("Cache flushed, new cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
+                  pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
         nLastFlush = nNow;
     }
     if (fDoFullFlush || ((mode == FLUSH_STATE_ALWAYS || mode == FLUSH_STATE_PERIODIC) && nNow > nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000)) {
@@ -3763,36 +3795,6 @@ bool ProcessNewBlock(CValidationState& state, const CChainParams& chainparams, C
         return error("%s: ActivateBestChain failed", __func__);
 
     return true;
-}
-void WarmTipCache(const CChainParams& chainparams)
-{
-    static int64_t lastBlockCreateTime = 0;
-    int64_t timeNow = GetTime();
-    if (timeNow > lastBlockCreateTime + 30) {  // FIX: magic value
-        LogPrint("coinsdb", "Creating new block at %ld: cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
-                 timeNow, pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize(), tipCache->DynamicMemoryUsage() * (1.0 / (1<<20)), tipCache->GetCacheSize()); // FIX: too much logging
-
-        int64_t start = GetTimeMicros();
-        BlockAssembler assembler(chainparams);
-        CBlockTemplate* blocktemplate(assembler.CreateNewBlock(CScript(), false));
-        int64_t mid = GetTimeMicros();
-        std::unordered_set<uint256, BlockHasher> inBlock(5000);
-        BOOST_FOREACH(CTransaction &tx, blocktemplate->block.vtx) {
-            if (!tx.IsCoinBase()) {
-                inBlock.insert(tx.GetHash());
-                BOOST_FOREACH(const CTxIn &txin, tx.vin) {
-                    if (!inBlock.count(txin.prevout.hash))
-                        tipCache->HaveCoins(txin.prevout.hash);
-                }
-            }
-        }
-        int64_t end = GetTimeMicros();
-        delete blocktemplate; // FIX: not the most efficient to have to delete this every time
-        int64_t end2 = GetTimeMicros();
-        LogPrintf("Block created in %ld us, cache populated in %ld us, template erased in %ld us: cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
-                  mid-start,end-mid,end2-end,pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize(), tipCache->DynamicMemoryUsage() * (1.0 / (1<<20)), tipCache->GetCacheSize());  // FIX: too much logging
-        lastBlockCreateTime = timeNow;
-    }
 }
 
 bool TestBlockValidity(CValidationState& state, const CChainParams& chainparams, const CBlock& block, CBlockIndex* pindexPrev, bool fCheckPOW, bool fCheckMerkleRoot)

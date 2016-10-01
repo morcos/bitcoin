@@ -423,6 +423,12 @@ public:
     bool HaveCoinsInCache(const uint256 &txid) const;
 
     /**
+     * If the coins exist in the cache, mark them hot.
+     * Return the same as HaveCoinsInCache
+     */
+    bool HotCoins(const uint256 &txid);
+    
+    /**
      * Return a pointer to CCoins in the cache, or NULL if not found. This is
      * more efficient than GetCoins. Modifications to other cache entries are
      * allowed while accessing the returned pointer.

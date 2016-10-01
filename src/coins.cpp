@@ -155,6 +155,14 @@ bool CCoinsViewCache::HaveCoinsInCache(const uint256 &txid) const {
     return it != cacheCoins.end();
 }
 
+bool CCoinsViewCache::HotCoins(const uint256 &txid) {
+    CCoinsMap::iterator it = cacheCoins.find(txid);
+    if (it != cacheCoins.end()) {
+        it->second.flags |= CCoinsCacheEntry::HOT;
+    }
+    return false;
+}
+
 uint256 CCoinsViewCache::GetBestBlock() const {
     if (hashBlock.IsNull())
         hashBlock = base->GetBestBlock();
@@ -224,6 +232,7 @@ bool CCoinsViewCache::HotFlush() {
     cachedCoinsUsage = 0;
     for (CCoinsMap::iterator it = cacheCoins.begin(); it != cacheCoins.end(); it++) {
         cachedCoinsUsage += it->second.coins.DynamicMemoryUsage();
+    }
     return fOk;
 }
 
