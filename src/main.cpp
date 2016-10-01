@@ -2584,6 +2584,12 @@ enum FlushStateMode {
     FLUSH_STATE_ALWAYS
 };
 
+static int64_t timePruneFind = 0;
+static int64_t timePruneRemove = 0;
+static int64_t timeWriteIndex = 0;
+static int64_t timeFlushCoins = 0;
+static int64_t timeFSTD = 0;
+
 /**
  * Update the on-disk chain state.
  * The caches and indexes are flushed depending on the mode we're called with
@@ -2591,6 +2597,7 @@ enum FlushStateMode {
  * or always and in all cases if we're in prune mode and are deleting files.
  */
 bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
+    int64_t fStart = GetTimeMicros();
     const CChainParams& chainparams = Params();
     LOCK2(cs_main, cs_LastBlockFile);
     static int64_t nLastWrite = 0;
@@ -2600,6 +2607,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
     bool fFlushForPrune = false;
     try {
     if (fPruneMode && fCheckForPruning && !fReindex) {
+        int64_t pfStart = GetTimeMicros();
         FindFilesToPrune(setFilesToPrune, chainparams.PruneAfterHeight());
         fCheckForPruning = false;
         if (!setFilesToPrune.empty()) {
@@ -2609,6 +2617,8 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
                 fHavePruned = true;
             }
         }
+        int64_t pfEnd = GetTimeMicros(); timePruneFind += pfEnd - pfStart;
+        LogPrint("bench", "FSTD    - Prune find files: %.2fms [%.2fs]\n", (pfEnd - pfStart) * 0.001, timePruneFind * 0.000001);
     }
     int64_t nNow = GetTimeMicros();
     // Avoid writing/flushing immediately after startup.
@@ -2641,6 +2651,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         FlushBlockFile();
         // Then update all block file information (which may refer to block and undo files).
         {
+            int64_t wiStart = GetTimeMicros();
             std::vector<std::pair<int, const CBlockFileInfo*> > vFiles;
             vFiles.reserve(setDirtyFileInfo.size());
             for (set<int>::iterator it = setDirtyFileInfo.begin(); it != setDirtyFileInfo.end(); ) {
@@ -2656,14 +2667,23 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
             if (!pblocktree->WriteBatchSync(vFiles, nLastBlockFile, vBlocks)) {
                 return AbortNode(state, "Files to write to block index database");
             }
+            int64_t wiEnd = GetTimeMicros(); timeWriteIndex += wiEnd - wiStart;
+            LogPrint("bench", "FSTD    - Write Block Index: %.2fms [%.2fs]\n", (wiEnd - wiStart) * 0.001, timeWriteIndex * 0.000001);
+
         }
         // Finally remove any pruned files
-        if (fFlushForPrune)
+        if (fFlushForPrune) {
+            int64_t prStart = GetTimeMicros();
             UnlinkPrunedFiles(setFilesToPrune);
+            int64_t prEnd = GetTimeMicros(); timePruneRemove += prEnd - prStart;
+            LogPrint("bench", "FSTD    - Prune remove files: %.2fms [%.2fs]\n", (prEnd - prStart) * 0.001, timePruneRemove * 0.000001);
+
+        }
         nLastWrite = nNow;
     }
     // Flush best chain related state. This can only be done if the blocks / block index write was also done.
     if (fDoFullFlush) {
+        int64_t fcStart = GetTimeMicros();
         // Typical CCoins structures on disk are around 128 bytes in size.
         // Pushing a new one to the database can cause it to be written
         // twice (once in the log, and once in the tables). This is already
@@ -2678,6 +2698,10 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         LogPrintf("Cache flushed, new cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
                   pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
         nLastFlush = nNow;
+        int64_t fcEnd = GetTimeMicros(); timeFlushCoins += fcEnd - fcStart;
+        if (fcEnd - fcStart > 100)
+            LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs]\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001);
+
     }
     if (fDoFullFlush || ((mode == FLUSH_STATE_ALWAYS || mode == FLUSH_STATE_PERIODIC) && nNow > nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000)) {
         // Update best block in wallet (so we can detect restored wallets).
@@ -2687,6 +2711,9 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
     } catch (const std::runtime_error& e) {
         return AbortNode(state, std::string("System error while flushing: ") + e.what());
     }
+    int64_t fEnd = GetTimeMicros(); timeFSTD += fEnd - fStart;
+    LogPrint("bench", "FSTD  - FlushStateToDisk: %.2fms [%.2fs]\n", (fEnd - fStart) * 0.001, timeFSTD * 0.000001);
+
     return true;
 }
 
