@@ -2573,7 +2573,7 @@ static void WarmTipCache(const CChainParams& chainparams)
     int64_t end = GetTimeMicros();
     delete blocktemplate; // FIX: not the most efficient to have to delete this every time
     int64_t end2 = GetTimeMicros();
-    LogPrintf("Block created in %ld us, %u hot hashes and %u missed in %ld us, template erased in %ld us: cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
+    LogPrintf("Block created in %ld us, %u hot hashes and %u missed in %ld us, template erased in %ld us: cache= %.1f MiB(%utx)\n",
               mid-start,hotHashes,missingHashes,end-mid,end2-end,pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
 }
 
@@ -2695,7 +2695,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         WarmTipCache(Params());
         if (!pcoinsTip->HotFlush())
             return AbortNode(state, "Failed to write to coin database");
-        LogPrintf("Cache flushed, new cache= %.1f MiB(%utx) tipcache= %.1f MiB(%utx)\n",
+        LogPrintf("Cache flushed, new cache= %.1f MiB(%utx)\n",
                   pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
         nLastFlush = nNow;
         int64_t fcEnd = GetTimeMicros(); timeFlushCoins += fcEnd - fcStart;
