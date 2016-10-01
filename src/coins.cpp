@@ -159,6 +159,7 @@ bool CCoinsViewCache::HotCoins(const uint256 &txid) {
     CCoinsMap::iterator it = cacheCoins.find(txid);
     if (it != cacheCoins.end()) {
         it->second.flags |= CCoinsCacheEntry::HOT;
+        return true;
     }
     return false;
 }
