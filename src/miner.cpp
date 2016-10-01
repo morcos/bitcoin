@@ -168,7 +168,7 @@ CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bo
     nLastBlockTx = nBlockTx;
     nLastBlockSize = nBlockSize;
     nLastBlockWeight = nBlockWeight;
-    LogPrintf("CreateNewBlock(): total weight %u txs: %u fees: %ld sigops %d from mempool of %u txs %5.1f MB\n", nBlockWeight, nBlockTx, nFees, nBlockSigOpsCost, mempool.size(), (double)mempool.DynamicMemoryUsage() / 1000 / 1000));
+    LogPrintf("CreateNewBlock(): total weight %u txs: %u fees: %ld sigops %d from mempool of %u txs %5.1f MB\n", nBlockWeight, nBlockTx, nFees, nBlockSigOpsCost, mempool.size(), (double)mempool.DynamicMemoryUsage() / 1000 / 1000);
 
     // Create coinbase transaction.
     CMutableTransaction coinbaseTx;
