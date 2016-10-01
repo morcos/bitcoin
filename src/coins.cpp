@@ -217,6 +217,16 @@ bool CCoinsViewCache::Flush() {
     return fOk;
 }
 
+
+bool CCoinsViewCache::HotFlush() {
+    bool fOk = base->BatchWrite(cacheCoins, hashBlock);
+    //Recalculate cachedCoinsUsage
+    cachedCoinsUsage = 0;
+    for (CCoinsMap::iterator it = cacheCoins.begin(); it != cacheCoins.end(); it++) {
+        cachedCoinsUsage += it->second.coins.DynamicMemoryUsage();
+    return fOk;
+}
+
 void CCoinsViewCache::Uncache(const uint256& hash)
 {
     CCoinsMap::iterator it = cacheCoins.find(hash);

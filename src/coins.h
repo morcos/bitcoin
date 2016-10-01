@@ -292,6 +292,7 @@ struct CCoinsCacheEntry
     enum Flags {
         DIRTY = (1 << 0), // This cache entry is potentially different from the version in the parent view.
         FRESH = (1 << 1), // The parent view does not have this entry (or it is pruned).
+        HOT = (1 << 2), // This cache entry should be preserved in cache if possible (even after committing to parent)
     };
 
     CCoinsCacheEntry() : coins(), flags(0) {}
@@ -452,6 +453,14 @@ public:
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
     bool Flush();
+
+    /**
+     * Push the modifications applied to this cache to its base.
+     * But do not remove any entries marked HOT from the cache if the base->batchWrite supports it.
+     * Failure to call this method before destruction will cause the changes to be forgotten.
+     * If false is returned, the state of this cache (and its backing view) will be undefined.
+     */
+    bool HotFlush();
 
     /**
      * Removes the transaction with the given hash from the cache, if it is
