@@ -2587,6 +2587,7 @@ enum FlushStateMode {
 static int64_t timePruneFind = 0;
 static int64_t timePruneRemove = 0;
 static int64_t timeWriteIndex = 0;
+static int64_t timeTrimCoins = 0;
 static int64_t timeFlushCoins = 0;
 static int64_t timeFSTD = 0;
 
@@ -2602,6 +2603,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
     LOCK2(cs_main, cs_LastBlockFile);
     static int64_t nLastWrite = 0;
     static int64_t nLastFlush = 0;
+    static int64_t nLastTrim = 0;
     static int64_t nLastSetChain = 0;
     std::set<int> setFilesToPrune;
     bool fFlushForPrune = false;
@@ -2643,7 +2645,8 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
     // Combine all conditions that result in a full cache flush.
     bool fDoFullFlush = (mode == FLUSH_STATE_ALWAYS) || fCacheLarge || fCacheCritical || fPeriodicFlush || fFlushForPrune;
     // Write blocks and block index to disk.
-    if (fDoFullFlush || fPeriodicWrite) {
+    bool fTrimFlush = mode == FLUSH_STATE_PERIODIC && !fDoFullFlush && cacheSize * (10.0/5) > nCoinCacheUsage && nNow > nLastTrim + (int64_t)DATABASE_TRIM_INTERVAL * 1000000; 
+    if (fDoFullFlush || fPeriodicWrite || fTrimFlush) {
         // Depend on nMinDiskSpace to ensure we can write block index
         if (!CheckDiskSpace(0))
             return state.Error("out of disk space");
@@ -2682,7 +2685,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         nLastWrite = nNow;
     }
     // Flush best chain related state. This can only be done if the blocks / block index write was also done.
-    if (fDoFullFlush) {
+    if (fDoFullFlush || fTrimFlush) {
         int64_t fcStart = GetTimeMicros();
         // Typical CCoins structures on disk are around 128 bytes in size.
         // Pushing a new one to the database can cause it to be written
@@ -2694,16 +2697,19 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         // Flush the chainstate (which may refer to block index entries).
         if (chainActive.Tip())
             WarmTipCache(Params());
-        if (!pcoinsTip->HotFlush())
+        if (!pcoinsTip->HotFlush(fTrimFlush ? CCoinsView::TRIM : CCoinsView::NORMAL))
             return AbortNode(state, "Failed to write to coin database");
         LogPrintf("Cache flushed, new cache= %.1f MiB(%utx)\n",
                   pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
-        nLastFlush = nNow;
+        if (fTrimFlush)
+            nLastTrim = nNow;
+        else
+            nLastFlush = nNow;
         int64_t fcEnd = GetTimeMicros(); timeFlushCoins += fcEnd - fcStart;
-        LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs]\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001);
+        LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs] Mode: %s\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001,fTrimFlush ? "TRIM" : "NORMAL");
 
     }
-    if (fDoFullFlush || ((mode == FLUSH_STATE_ALWAYS || mode == FLUSH_STATE_PERIODIC) && nNow > nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000)) {
+    if (fDoFullFlush || fTrimFlush || ((mode == FLUSH_STATE_ALWAYS || mode == FLUSH_STATE_PERIODIC) && nNow > nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000)) {
         // Update best block in wallet (so we can detect restored wallets).
         GetMainSignals().SetBestChain(chainActive.GetLocator());
         nLastSetChain = nNow;
