@@ -95,6 +95,8 @@ BlockAssembler::BlockAssembler(const CChainParams& _chainparams)
         }
     }
 
+    lowestBlockFee = ::minRelayTxFee;
+    
     // Limit weight to between 4K and MAX_BLOCK_WEIGHT-4K for sanity:
     nBlockMaxWeight = std::max((unsigned int)4000, std::min((unsigned int)(MAX_BLOCK_WEIGHT-4000), nBlockMaxWeight));
     // Limit size to between 1K and MAX_BLOCK_SERIALIZED_SIZE-1K for sanity:
@@ -407,6 +409,10 @@ void BlockAssembler::addPackageTxs(bool failFast)
     // and modifying them for their already included ancestors
     UpdatePackagesForAdded(inBlock, mapModifiedTx);
 
+    if (failFast) {
+        lowestBlockFee = mempool.estimateFee(25);
+        LogPrintf("Using %s as lowest block fee\n", lowestBlockFee.ToString().c_str());
+    }
     CTxMemPool::indexed_transaction_set::index<ancestor_score>::type::iterator mi = mempool.mapTx.get<ancestor_score>().begin();
     CTxMemPool::txiter iter;
     while (mi != mempool.mapTx.get<ancestor_score>().end() || !mapModifiedTx.empty())
@@ -457,7 +463,7 @@ void BlockAssembler::addPackageTxs(bool failFast)
             packageSigOpsCost = modit->nSigOpCostWithAncestors;
         }
 
-        if (packageFees < ::minRelayTxFee.GetFee(packageSize)) {
+        if (packageFees < lowestBlockFee.GetFee(packageSize)) {
             // Everything else we might consider has a lower fee rate
             return;
         }

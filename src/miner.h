@@ -161,6 +161,7 @@ private:
     int lastFewTxs;
     bool blockFinished;
 
+    CFeeRate lowestBlockFee;
 public:
     BlockAssembler(const CChainParams& chainparams);
     /** Construct a new block template with coinbase to scriptPubKeyIn */
