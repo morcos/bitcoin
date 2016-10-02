@@ -95,9 +95,9 @@ static const unsigned int MAX_HEADERS_RESULTS = 2000;
 static const unsigned int BLOCK_DOWNLOAD_WINDOW = 1024;
 /** Time to wait (in seconds) between writing blocks/block index to disk. */
 static const unsigned int DATABASE_WRITE_INTERVAL = 60 * 60;
-static const unsigned int DATABASE_TRIM_INTERVAL = 30 * 60;
+static const unsigned int DATABASE_TRIM_INTERVAL = 6 * 60 * 60;
 /** Time to wait (in seconds) between flushing chainstate to disk. */
-static const unsigned int DATABASE_FLUSH_INTERVAL = 24 * 60 * 60;
+static const unsigned int DATABASE_FLUSH_INTERVAL = 70 * 24 * 60 * 60;
 /** Maximum length of reject messages. */
 static const unsigned int MAX_REJECT_MESSAGE_LENGTH = 111;
 /** Average delay between local address broadcasts in seconds. */
