@@ -87,6 +87,8 @@ public:
     //! version of the CTransaction; accesses to this value should probably check for nHeight as well,
     //! as new tx version will probably only be introduced at certain heights
     int nVersion;
+ 
+    static const size_t LARGE_COINS = 1000;
 
     void FromTx(const CTransaction &tx, int nHeightIn) {
         fCoinBase = tx.IsCoinBase();
@@ -294,8 +296,9 @@ struct CCoinsCacheEntry
         DIRTY = (1 << 0), // This cache entry is potentially different from the version in the parent view.
         FRESH = (1 << 1), // The parent view does not have this entry (or it is pruned).
         HOT = (1 << 2), // This cache entry should be preserved in cache if possible (even after committing to parent)
+        BIG = (1 << 3),
     };
-
+    
     CCoinsCacheEntry() : coins(), flags(0) {}
 };
 
@@ -326,6 +329,11 @@ private:
 class CCoinsView
 {
 public:
+    enum WriteMode {
+        NORMAL,
+        TRIM,
+    };
+    
     //! Retrieve the CCoins (unspent transaction outputs) for a given txid
     virtual bool GetCoins(const uint256 &txid, CCoins &coins) const;
 
@@ -338,7 +346,7 @@ public:
 
     //! Do a bulk modification (multiple CCoins changes + BestBlock change).
     //! The passed mapCoins can be modified.
-    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    virtual bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, unsigned char mode);
 
     //! Get a cursor to iterate over the whole state
     virtual CCoinsViewCursor *Cursor() const;
@@ -360,7 +368,7 @@ public:
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
     void SetBackend(CCoinsView &viewIn);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, unsigned char mode);
     CCoinsViewCursor *Cursor() const;
 };
 
@@ -431,7 +439,7 @@ public:
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
     virtual void SetBestBlock(const uint256 &hashBlock);
-    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
+    bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, unsigned char mode);
 
     /**
      * Check if we have the given tx already loaded in this cache.
@@ -484,7 +492,7 @@ public:
      * Failure to call this method before destruction will cause the changes to be forgotten.
      * If false is returned, the state of this cache (and its backing view) will be undefined.
      */
-    bool HotFlush();
+    bool HotFlush(unsigned char mode);
 
     /**
      * Removes the transaction with the given hash from the cache, if it is

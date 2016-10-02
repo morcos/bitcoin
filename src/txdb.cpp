@@ -46,7 +46,7 @@ uint256 CCoinsViewDB::GetBestBlock() const {
     return hashBestChain;
 }
 
-bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
+bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, unsigned char mode) {
     CDBBatch batch(db);
     size_t count = 0;
     size_t changed = 0;
@@ -61,7 +61,10 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock) {
         }
         count++;
         CCoinsMap::iterator itOld = it++;
-        if (!(itOld->second.flags & CCoinsCacheEntry::HOT))
+        bool keep = itOld->second.flags & CCoinsCacheEntry::HOT;
+        if (mode == CCoinsView::TRIM)
+            keep = keep || !(itOld->second.flags & CCoinsCacheEntry::BIG);
+        if (!(keep))
             mapCoins.erase(itOld);
         else {
             itOld->second.flags = 0;  //Clear all flags
