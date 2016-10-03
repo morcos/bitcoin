@@ -123,6 +123,10 @@ public:
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
+        if (allAdded.load()) { // Cover the case where no checks were added
+            boost::unique_lock<boost::mutex> lock(mutex);
+            condWorker.notify_all();
+        }
         allAdded.store(true);
         bool result = Loop(0, true);
         allChecks.clear();
@@ -134,8 +138,8 @@ public:
     {
         if (allAdded.load()) {// first time in new loop
             boost::unique_lock<boost::mutex> lock(mutex);
-            allAdded.store(false);
             condWorker.notify_all();
+            allAdded.store(false);
         }
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
