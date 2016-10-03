@@ -2238,9 +2238,10 @@ bool FindUndoPos(CValidationState &state, int nFile, CDiskBlockPos &pos, unsigne
 
 static CCheckQueue<CScriptCheck> scriptcheckqueue(128);
 
-void ThreadScriptCheck() {
-    RenameThread("bitcoin-scriptch");
-    scriptcheckqueue.Thread();
+void ThreadScriptCheck(unsigned int id) {
+    std::string threadname = "bitcoin-scriptch" + std::string("%d",id);
+    RenameThread(threadname.c_str());
+    scriptcheckqueue.Thread(id);
 }
 
 // Protected by cs_main

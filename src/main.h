@@ -247,7 +247,7 @@ bool ProcessMessages(CNode* pfrom);
  */
 bool SendMessages(CNode* pto);
 /** Run an instance of the script checking thread */
-void ThreadScriptCheck();
+void ThreadScriptCheck(unsigned int id);
 /** Check whether we are doing an initial block download (synchronizing from disk or network) */
 bool IsInitialBlockDownload();
 /** Format a string that describes several potential problems detected by the core.
