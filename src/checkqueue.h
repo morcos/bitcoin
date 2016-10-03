@@ -55,13 +55,14 @@ private:
     {
         bool cachedDone[16] = {false};
         bool fOk = true;
+        bool localAllAdded = false;
         do {
 
             
             T* pcheck;
             // logically, the do loop starts here
-            while (!queue.pop(pcheck)) {
-                if (fMaster) {
+            if (fMaster) {
+                if (cachedDone[0] || !queue.pop(pcheck)) {
                     if (!cachedDone[0])
                         done[0].store(true);
                     bool allDone = true;
@@ -81,23 +82,26 @@ private:
                         return fRet;
                     }
                 }
-                else {
-                    if (allAdded) { //master isn't going to add any more to queue
+            }
+            else {
+                while (!queue.pop(pcheck)) {
+                    if (localAllAdded) {
                         done[id].store(true);
                         boost::unique_lock<boost::mutex> lock(mutex);
                         condWorker.wait(lock); // wait for more work
                     }
-                    //should make sure there is not a race condition here where we check done[0] then wait and miss our notification
+                    else {
+                        localAllAdded = allAdded.load();
+                    }
                 }
             }
-            
-
+            //should make sure there is not a race condition here where we check done[0] then wait and miss our notification
             // Check whether we need to do work at all
             fOk = fAllOk.load();  //atomic operation
 
             if (fOk)
                 fOk = (*pcheck)();
-          
+
             if (!fOk)
                 fAllOk.store(false); //atomic operation
         } while (true);
