@@ -12,6 +12,8 @@
 #include <boost/thread/condition_variable.hpp>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/mutex.hpp>
+#include <boost/lockfree/queue.hpp>
+#include <forward_list>
 
 template <typename T>
 class CCheckQueueControl;
@@ -30,85 +32,72 @@ template <typename T>
 class CCheckQueue
 {
 private:
+    std::forward_list<T> allChecks;
+    
     //! Mutex to protect the inner state
-    boost::mutex mutex[16];
+    boost::mutex mutex;
 
     //! Worker threads block on this when out of work
-    boost::condition_variable condWorker[16];
+    boost::condition_variable condWorker;
 
     //! The queue of elements to be processed.
     //! As the order of booleans doesn't matter, it is used as a LIFO (stack)
-    std::vector<T> queue[16];
+    boost::lockfree::queue<T*> queue;
 
     //! The temporary evaluation result.
     std::atomic<bool> fAllOk;
 
     std::atomic<bool> done[16];
-
-    unsigned int checknumber;
+    std::atomic<bool> allAdded;
 
     /** Internal function that does bulk of the verification work. */
     bool Loop(unsigned int id, bool fMaster = false)
     {
-        std::vector<T> vChecks;
-        unsigned int nNow = 0;
         bool cachedDone[16] = {false};
         bool fOk = true;
         do {
-            {
-                boost::unique_lock<boost::mutex> lock(mutex[id]);
 
-                // logically, the do loop starts here
-                while (queue[id].empty()) {
-                    if (fMaster) {
-                        bool allDone = true;
-                        for (unsigned int i = 0; i <16 ; i++) { //only works if scriptcheck threads = 16
-                            cachedDone[i] = cachedDone[i] || done[i].load();
-                            allDone = allDone && cachedDone[i];
-                        }
-                        if (allDone) {
-                            bool fRet = fAllOk.load(); //atomic operation
-                            // reset the status for new work later
-                            if (fMaster)
-                                fAllOk.store(true); //atomic operation
-                            for (unsigned int i = 0; i <16 ; i++) {
-                                done[i].store(false);
-                            }
-                            // return the current status
-                            return fRet;
-                        }
+            
+            T* pcheck;
+            // logically, the do loop starts here
+            while (!queue.pop(pcheck)) {
+                if (fMaster) {
+                    if (!cachedDone[0])
+                        done[0].store(true);
+                    bool allDone = true;
+                    for (unsigned int i = 0; i <16 ; i++) { //only works if scriptcheck threads = 16
+                        cachedDone[i] = cachedDone[i] || done[i].load();
+                        allDone = allDone && cachedDone[i];
                     }
-                    else {
-                        if (done[0].load()) { //master isn't going to add any more to queue
-                            done[id].store(true);
+                    if (allDone) {
+                        bool fRet = fAllOk.load(); //atomic operation
+                        // reset the status for new work later
+                        if (fMaster)
+                            fAllOk.store(true); //atomic operation
+                        for (unsigned int i = 0; i <16 ; i++) {
+                            done[i].store(false);
                         }
-                        condWorker[id].wait(lock); // wait for more work
-                        //should make sure there is not a race condition here where we check done[0] then wait and miss our notification
+                        // return the current status
+                        return fRet;
                     }
                 }
-                // Decide how many work units to process now.
-                // * Do not try to do everything at once, but aim for increasingly smaller batches so
-                //   all workers finish approximately simultaneously.
-                // * Try to account for idle jobs which will instantly start helping.
-                // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
-                nNow = queue[id].size();
-                vChecks.resize(nNow);
-                for (unsigned int i = 0; i < nNow; i++) {
-                    // We want the lock on the mutex to be as short as possible, so swap jobs from the global
-                    // queue[id] to the local batch vector instead of copying.
-                    vChecks[i].swap(queue[id].back());
-                    queue[id].pop_back();
+                else {
+                    if (allAdded) { //master isn't going to add any more to queue
+                        done[id].store(true);
+                        boost::unique_lock<boost::mutex> lock(mutex);
+                        condWorker.wait(lock); // wait for more work
+                    }
+                    //should make sure there is not a race condition here where we check done[0] then wait and miss our notification
                 }
             }
+            
 
             // Check whether we need to do work at all
             fOk = fAllOk.load();  //atomic operation
 
-            // execute work
-            BOOST_FOREACH (T& check, vChecks)
-                if (fOk)
-                    fOk = check();
-            vChecks.clear();
+            if (fOk)
+                fOk = (*pcheck)();
+          
             if (!fOk)
                 fAllOk.store(false); //atomic operation
         } while (true);
@@ -116,7 +105,7 @@ private:
 
 public:
     //! Create a new check queue
-    CCheckQueue(unsigned int nBatchSizeIn) : fAllOk(true), checknumber(0) {}
+    CCheckQueue(unsigned int nBatchSizeIn) : fAllOk(true), allAdded(false) {}
 
     //! Worker thread
     void Thread(unsigned int id)
@@ -127,23 +116,23 @@ public:
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
-        done[0].store(true);  //set master done to signal to other threads they can be done now
-        for (unsigned int i=0;i<15;i++)
-            condWorker[i+1].notify_one();
-        checknumber = 0;
-        return Loop(0, true);
+        allAdded = true;
+        bool result = Loop(0, true);
+        allChecks.clear();
+        return result;
     }
 
     //! Add a batch of checks to the queue
     void Add(std::vector<T>& vChecks)
     {
+        if (allAdded = true) {// first time in new loop
+            allAdded = false;
+            condWorker.notify_all();
+        }
         BOOST_FOREACH (T& check, vChecks) {
-            unsigned int threadid = checknumber % 15 + 1;
-            checknumber++;
-            boost::unique_lock<boost::mutex> lock(mutex[threadid]);
-            queue[threadid].push_back(T());
-            check.swap(queue[threadid].back());
-            condWorker[threadid].notify_one();
+            allChecks.emplace_front(T());
+            allChecks.front().swap(check);
+            queue.push(&allChecks.front());
         }
     }
 
