@@ -89,6 +89,7 @@ private:
                 while (!queue.pop(pcheck)) {
                     if (localAllAdded) {
                         done[id].store(true);
+                        localAllAdded = false;
                         boost::unique_lock<boost::mutex> lock(mutex);
                         condWorker.wait(lock); // wait for more work
                     }
