@@ -42,7 +42,7 @@ private:
 
     //! The queue of elements to be processed.
     //! As the order of booleans doesn't matter, it is used as a LIFO (stack)
-    boost::lockfree::queue<T*> queue;
+    boost::lockfree::queue<T*, boost::lockfree::capacity<10000>> queue;
 
     //! The temporary evaluation result.
     std::atomic<bool> fAllOk;
