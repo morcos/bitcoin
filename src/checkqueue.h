@@ -133,6 +133,7 @@ public:
     void Add(std::vector<T>& vChecks)
     {
         if (allAdded.load()) {// first time in new loop
+            boost::unique_lock<boost::mutex> lock(mutex);
             allAdded.store(false);
             condWorker.notify_all();
         }
