@@ -65,21 +65,23 @@ private:
                 if (cachedDone[0] || !queue.pop(pcheck)) {
                     if (!cachedDone[0])
                         done[0].store(true);
-                    bool allDone = true;
-                    for (unsigned int i = 0; i <16 ; i++) { //only works if scriptcheck threads = 16
-                        cachedDone[i] = cachedDone[i] || done[i].load();
-                        allDone = allDone && cachedDone[i];
-                    }
-                    if (allDone) {
-                        bool fRet = fAllOk.load(); //atomic operation
-                        // reset the status for new work later
-                        if (fMaster)
-                            fAllOk.store(true); //atomic operation
-                        for (unsigned int i = 0; i <16 ; i++) {
-                            done[i].store(false);
+                    while (true) {
+                        bool allDone = true;
+                        for (unsigned int i = 0; i <16 ; i++) { //only works if scriptcheck threads = 16
+                            cachedDone[i] = cachedDone[i] || done[i].load();
+                            allDone = allDone && cachedDone[i];
                         }
-                        // return the current status
-                        return fRet;
+                        if (allDone) {
+                            bool fRet = fAllOk.load(); //atomic operation
+                            // reset the status for new work later
+                            if (fMaster)
+                                fAllOk.store(true); //atomic operation
+                            for (unsigned int i = 0; i <16 ; i++) {
+                                done[i].store(false);
+                            }
+                            // return the current status
+                            return fRet;
+                        }
                     }
                 }
             }
@@ -120,7 +122,7 @@ public:
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
-        allAdded = true;
+        allAdded.store(true);
         bool result = Loop(0, true);
         allChecks.clear();
         return result;
@@ -129,8 +131,8 @@ public:
     //! Add a batch of checks to the queue
     void Add(std::vector<T>& vChecks)
     {
-        if (allAdded = true) {// first time in new loop
-            allAdded = false;
+        if (allAdded.load()) {// first time in new loop
+            allAdded.store(false);
             condWorker.notify_all();
         }
         BOOST_FOREACH (T& check, vChecks) {
