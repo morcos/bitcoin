@@ -144,6 +144,8 @@ public:
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
             allChecks.front().swap(check);
+            std::atomic<int> a;
+            a.store(0);
             queue.push(&allChecks.front());
         }
     }
