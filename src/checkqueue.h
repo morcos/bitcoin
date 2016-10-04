@@ -51,8 +51,9 @@ private:
     std::atomic<bool> fAllOk;
 
     std::atomic<bool> done[16];
-    std::atomic<bool> allAdded;
-
+    bool allAdded;
+    bool newBlock;
+    
     /** Internal function that does bulk of the verification work. */
     bool Loop(unsigned int id, bool fMaster = false)
     {
@@ -62,26 +63,32 @@ private:
         do {
 
             
-            T* pcheck;
+            T* pcheck[16];
+            unsigned int batchSize=1;
             // logically, the do loop starts here
-            size_t qsize = 0;
+            unsigned int qsize = 0;
             {
                 std::lock_guard<std::mutex> lg(mutex);
                 if (qsize = queue.size()) {
                     //To do, add more than 1 if qsize is big?
-                    pcheck = queue.front();
-                    queue.pop();
+                    batchSize = std::max(1u,std::min(16u,qsize/4));
+                    for (auto i = 0;i < batchSize; i++) {
+                        pcheck[i] = queue.front();
+                        queue.pop();
+                    }
                     fOk = fAllOk.load();  // should this be here or outside of the lock or what?
                 }
                 else {
-                    localAllAdded = allAdded.load(); // this could also be outside of lock?
+                    localAllAdded = allAdded; // this could also be outside of lock?
                 }
             }
 
             if (qsize) {
                 if (fOk)
-                    fOk = (*pcheck)();
-                
+                {
+                    for (auto i =0; i < batchSize; i++)
+                        fOk = fOk && (*pcheck[i])();
+                }
                 if (!fOk)
                     fAllOk.store(false); //atomic operation   (maybe this should not be atomic and take the lock here)
 
@@ -134,11 +141,16 @@ public:
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
-        if (allAdded.load()) { // Cover the case where no checks were added
+        if (newBlock) { // Cover the case where no checks were added
+            newBlock = false;
             std::unique_lock<std::mutex> lock(mutex);
+            allAdded = true;
             condWorker.notify_all();
         }
-        allAdded.store(true);
+        else {
+            std::lock_guard<std::mutex> lg(mutex);
+            allAdded = true;
+        }
         bool result = Loop(0, true);
         allChecks.clear();
         return result;
@@ -147,10 +159,10 @@ public:
     //! Add a batch of checks to the queue
     void Add(std::vector<T>& vChecks)
     {
-        if (allAdded.load()) {// first time in new loop
+        if (newBlock) {// first time in new loop
             std::unique_lock<std::mutex> lock(mutex);
             condWorker.notify_all();
-            allAdded.store(false);
+            newBlock = false;
         }
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
