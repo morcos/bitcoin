@@ -53,7 +53,8 @@ private:
     std::atomic<bool> done[16];
     bool allAdded;
     bool newBlock;
-    
+
+    std::vector<T*> checkPtrs;
     /** Internal function that does bulk of the verification work. */
     bool Loop(unsigned int id, bool fMaster = false)
     {
@@ -71,7 +72,7 @@ private:
                 std::lock_guard<std::mutex> lg(mutex);
                 if (qsize = queue.size()) {
                     //To do, add more than 1 if qsize is big?
-                    batchSize = std::max(1u,std::min(16u,qsize/4));
+                    batchSize = std::max(1u,std::min(16u,qsize/2));
                     for (auto i = 0;i < batchSize; i++) {
                         pcheck[i] = queue.front();
                         queue.pop();
@@ -148,8 +149,14 @@ public:
         }
         else {
             std::lock_guard<std::mutex> lg(mutex);
+            if (checkPtrs.size()) {
+                BOOST_FOREACH (T* pcheck, checkPtrs) {
+                    queue.push(pcheck);
+                }
+            }
             allAdded = true;
         }
+        checkPtrs.clear();
         bool result = Loop(0, true);
         allChecks.clear();
         newBlock = true;
@@ -168,18 +175,23 @@ public:
             condWorker.notify_all();
             newBlock = false;
         }
-        std::vector<T*> checkPtrs;
+
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
             allChecks.front().swap(check);
             checkPtrs.push_back(&allChecks.front());
         }
+        if (checkPtrs.size() > 100)
         {
+            {
             std::lock_guard<std::mutex> lg(mutex);
             BOOST_FOREACH (T* pcheck, checkPtrs) {
                 queue.push(pcheck);
             }
+            }
+            checkPtrs.clear();
         }
+        
     }
 
     ~CCheckQueue()
