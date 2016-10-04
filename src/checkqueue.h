@@ -168,12 +168,16 @@ public:
             condWorker.notify_all();
             newBlock = false;
         }
+        std::vector<T*> checkPtrs;
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
             allChecks.front().swap(check);
-            {
-                std::lock_guard<std::mutex> lg(mutex);
-                queue.push(&allChecks.front());
+            checkPtrs.push_back(&allChecks.front());
+        }
+        {
+            std::lock_guard<std::mutex> lg(mutex);
+            BOOST_FOREACH (T* pcheck, checkPtrs) {
+                queue.push(pcheck);
             }
         }
     }
