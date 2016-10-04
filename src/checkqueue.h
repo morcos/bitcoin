@@ -130,7 +130,7 @@ private:
 
 public:
     //! Create a new check queue
-    CCheckQueue(unsigned int nBatchSizeIn) : fAllOk(true), allAdded(false) {}
+    CCheckQueue(unsigned int nBatchSizeIn) : fAllOk(true), allAdded(false), newBlock(true) {}
 
     //! Worker thread
     void Thread(unsigned int id)
@@ -142,7 +142,6 @@ public:
     bool Wait()
     {
         if (newBlock) { // Cover the case where no checks were added
-            newBlock = false;
             std::unique_lock<std::mutex> lock(mutex);
             allAdded = true;
             condWorker.notify_all();
@@ -153,6 +152,7 @@ public:
         }
         bool result = Loop(0, true);
         allChecks.clear();
+        newBlock = true;
         return result;
     }
 
