@@ -36,7 +36,7 @@ private:
     
     //! Mutex to protect the inner state
     boost::mutex mutex;
-
+    std::atomic<int> a;
     //! Worker threads block on this when out of work
     boost::condition_variable condWorker;
 
@@ -86,7 +86,7 @@ private:
                 }
             }
             else {
-                while (!queue.pop(pcheck)) {
+                while (a.load() || !queue.pop(pcheck)) {
                     if (localAllAdded) {
                         done[id].store(true);
                         localAllAdded = false;
@@ -144,9 +144,9 @@ public:
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
             allChecks.front().swap(check);
-            std::atomic<int> a;
-            a.store(0);
+
             queue.push(&allChecks.front());
+            a.store(0);
         }
     }
 
