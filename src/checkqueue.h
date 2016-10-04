@@ -153,6 +153,10 @@ public:
         bool result = Loop(0, true);
         allChecks.clear();
         newBlock = true;
+        { 
+            std::lock_guard<std::mutex> lg(mutex);
+            allAdded = false;
+        }
         return result;
     }
 
