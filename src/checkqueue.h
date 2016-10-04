@@ -35,14 +35,14 @@ private:
     std::forward_list<T> allChecks;
     
     //! Mutex to protect the inner state
-    boost::mutex mutex;
-    std::atomic<int> a;
+    std::mutex mutex;
+    
     //! Worker threads block on this when out of work
-    boost::condition_variable condWorker;
+    std::condition_variable condWorker;
 
     //! The queue of elements to be processed.
     //! As the order of booleans doesn't matter, it is used as a LIFO (stack)
-    boost::lockfree::queue<T*, boost::lockfree::capacity<10000>> queue;
+    std::queue<T*> queue;
 
     //! The temporary evaluation result.
     std::atomic<bool> fAllOk;
@@ -61,8 +61,30 @@ private:
             
             T* pcheck;
             // logically, the do loop starts here
-            if (fMaster) {
-                if (cachedDone[0] || !queue.pop(pcheck)) {
+            size_t qsize = 0;
+            {
+                std::lock_guard<std::mutex> lg(mutex);
+                if (qsize = queue.size()) {
+                    //To do, add more than 1 if qsize is big?
+                    pcheck = queue.front();
+                    queue.pop();
+                    fOk = fAllOk.load();  // should this be here or outside of the lock or what?
+                }
+                else {
+                    localAllAdded = allAdded.load(); // this could also be outside of lock?
+                }
+            }
+
+            if (qsize) {
+                if (fOk)
+                    fOk = (*pcheck)();
+                
+                if (!fOk)
+                    fAllOk.store(false); //atomic operation   (maybe this should not be atomic and take the lock here)
+
+            }
+            else {
+                if (fMaster) {
                     if (!cachedDone[0])
                         done[0].store(true);
                     while (true) {
@@ -84,29 +106,15 @@ private:
                         }
                     }
                 }
-            }
-            else {
-                while (a.load() || !queue.pop(pcheck)) {
+                else {
                     if (localAllAdded) {
                         done[id].store(true);
                         localAllAdded = false;
-                        boost::unique_lock<boost::mutex> lock(mutex);
+                        std::unique_lock<std::mutex> lock(mutex);
                         condWorker.wait(lock); // wait for more work
-                    }
-                    else {
-                        localAllAdded = allAdded.load();
                     }
                 }
             }
-            //should make sure there is not a race condition here where we check done[0] then wait and miss our notification
-            // Check whether we need to do work at all
-            fOk = fAllOk.load();  //atomic operation
-
-            if (fOk)
-                fOk = (*pcheck)();
-
-            if (!fOk)
-                fAllOk.store(false); //atomic operation
         } while (true);
     }
 
@@ -124,7 +132,7 @@ public:
     bool Wait()
     {
         if (allAdded.load()) { // Cover the case where no checks were added
-            boost::unique_lock<boost::mutex> lock(mutex);
+            std::unique_lock<std::mutex> lock(mutex);
             condWorker.notify_all();
         }
         allAdded.store(true);
@@ -137,16 +145,17 @@ public:
     void Add(std::vector<T>& vChecks)
     {
         if (allAdded.load()) {// first time in new loop
-            boost::unique_lock<boost::mutex> lock(mutex);
+            std::unique_lock<std::mutex> lock(mutex);
             condWorker.notify_all();
             allAdded.store(false);
         }
         BOOST_FOREACH (T& check, vChecks) {
             allChecks.emplace_front(T());
             allChecks.front().swap(check);
-
-            queue.push(&allChecks.front());
-            a.store(0);
+            {
+                std::lock_guard<std::mutex> lg(mutex);
+                queue.push(&allChecks.front());
+            }
         }
     }
 
