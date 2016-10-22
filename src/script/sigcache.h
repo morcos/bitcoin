@@ -27,4 +27,6 @@ public:
     bool VerifySignature(const std::vector<unsigned char>& vchSig, const CPubKey& vchPubKey, const uint256& sighash) const;
 };
 
+void InitSignatureCache();
+
 #endif // BITCOIN_SCRIPT_SIGCACHE_H
