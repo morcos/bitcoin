@@ -1313,7 +1313,7 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
                 pblocktree = new CBlockTreeDB(nBlockTreeDBCache, false, fReindex);
                 pcoinsdbview = new CCoinsViewDB(nCoinDBCache, false, fReindex || fReindexChainState);
                 pcoinscatcher = new CCoinsViewErrorCatcher(pcoinsdbview);
-                pcoinsTip = new CCoinsViewCache(pcoinscatcher);
+                pcoinsTip = new CCoinsViewUndoCache(pcoinscatcher);
 
                 if (fReindex) {
                     pblocktree->WriteReindexing(true);

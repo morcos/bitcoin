@@ -15,6 +15,7 @@
 
 #include <assert.h>
 #include <stdint.h>
+#include <unordered_set>
 
 #include <boost/foreach.hpp>
 #include <boost/unordered_map.hpp>
@@ -385,6 +386,23 @@ public:
     friend class CCoinsViewCache;
 };
 
+class CCoinsViewUndoCache;
+
+/**
+ * A RAII helper class that enables recording undo informatin for a CCoinsViewUndoCache
+ * and ensures the undo information is deleted or applied after a limited scope leaving
+ * the CCoinsViewUndoCache in a consistent state;
+ */
+class CCoinsUndoEnabler
+{
+private:
+    CCoinsViewUndoCache& cache;
+
+public:
+    CCoinsUndoEnabler(CCoinsViewUndoCache& cache_);
+    ~CCoinsUndoEnabler();
+};
+
 /** CCoinsView that adds a memory cache for transactions to another CCoinsView */
 class CCoinsViewCache : public CCoinsViewBacked
 {
@@ -411,7 +429,7 @@ public:
     bool GetCoins(const uint256 &txid, CCoins &coins) const;
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;
-    void SetBestBlock(const uint256 &hashBlock);
+    virtual void SetBestBlock(const uint256 &hashBlock);
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
 
     /**
@@ -433,7 +451,7 @@ public:
      * txid exists, a new one is created. Simultaneous modifications are not
      * allowed.
      */
-    CCoinsModifier ModifyCoins(const uint256 &txid);
+    virtual CCoinsModifier ModifyCoins(const uint256 &txid);
 
     /**
      * Return a modifiable reference to a CCoins. Assumes that no entry with the given
@@ -444,7 +462,7 @@ public:
      * would not properly overwrite the first coinbase of the pair. Simultaneous modifications
      * are not allowed.
      */
-    CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
+    virtual CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
 
     /**
      * Push the modifications applied to this cache to its base.
@@ -492,11 +510,48 @@ public:
 private:
     CCoinsMap::iterator FetchCoins(const uint256 &txid);
     CCoinsMap::const_iterator FetchCoins(const uint256 &txid) const;
+protected:
+    CCoinsModifier ModifyCoins_impl(std::pair<CCoinsMap::iterator, bool> ret);
+    CCoinsModifier ModifyNewCoins_impl(std::pair<CCoinsMap::iterator, bool> ret, bool coinbase);
 
     /**
      * By making the copy constructor private, we prevent accidentally using it when one intends to create a cache on top of a base cache.
      */
     CCoinsViewCache(const CCoinsViewCache &);
+};
+
+class CCoinsViewUndoCache : public CCoinsViewCache
+{
+    CCoinsMap undoCoins;
+    typedef std::unordered_set<uint256, SaltedTxidHasher> HashSet;
+    HashSet eraseCoins;
+    uint256 oldHashBlock;
+    bool undoEnabled;
+
+public:
+    CCoinsViewUndoCache(CCoinsView *baseIn);
+    ~CCoinsViewUndoCache();
+
+    void Undo();
+
+    /**
+     * Saves old hashBlock if undoEnabled before calling base class function.
+     */
+    void SetBestBlock(const uint256 &hashBlock);
+
+    /**
+     * Requires undoEnabled and stores undo information before calling base class function.
+     */
+    CCoinsModifier ModifyCoins(const uint256 &txid);
+
+     /**
+     * Requires undoEnabled and stores undo information before calling base class function.
+     */
+    CCoinsModifier ModifyNewCoins(const uint256 &txid, bool coinbase);
+
+    friend class CCoinsUndoEnabler;
+private:
+    void SaveUndoState(std::pair<CCoinsMap::iterator, bool> ret);
 };
 
 #endif // BITCOIN_COINS_H

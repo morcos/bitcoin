@@ -67,7 +67,7 @@ TestingSetup::TestingSetup(const std::string& chainName) : BasicTestingSetup(cha
         mempool.setSanityCheck(1.0);
         pblocktree = new CBlockTreeDB(1 << 20, true);
         pcoinsdbview = new CCoinsViewDB(1 << 23, true);
-        pcoinsTip = new CCoinsViewCache(pcoinsdbview);
+        pcoinsTip = new CCoinsViewUndoCache(pcoinsdbview);
         InitBlockIndex(chainparams);
         {
             CValidationState state;
