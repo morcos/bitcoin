@@ -9,9 +9,14 @@
 #include <vector>
 
 #include <boost/foreach.hpp>
-#include <boost/thread/condition_variable.hpp>
-#include <boost/thread/locks.hpp>
-#include <boost/thread/mutex.hpp>
+//#include <boost/thread/condition_variable.hpp>
+//#include <boost/thread/locks.hpp>
+//#include <boost/thread/mutex.hpp>
+//#include <boost/lockfree/queue.hpp>
+#include <forward_list>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 
 template <typename T>
 class CCheckQueueControl;
@@ -30,142 +35,174 @@ template <typename T>
 class CCheckQueue
 {
 private:
+    std::forward_list<T> allChecks;
+    
     //! Mutex to protect the inner state
-    boost::mutex mutex;
-
+    std::mutex mutex;
+    
     //! Worker threads block on this when out of work
-    boost::condition_variable condWorker;
-
-    //! Master thread blocks on this when out of work
-    boost::condition_variable condMaster;
+    std::condition_variable condWorker;
 
     //! The queue of elements to be processed.
     //! As the order of booleans doesn't matter, it is used as a LIFO (stack)
-    std::vector<T> queue;
-
-    //! The number of workers (including the master) that are idle.
-    int nIdle;
-
-    //! The total number of workers (including the master).
-    int nTotal;
+    std::queue<T*> queue;
 
     //! The temporary evaluation result.
-    bool fAllOk;
+    std::atomic<bool> fAllOk;
 
-    /**
-     * Number of verifications that haven't completed yet.
-     * This includes elements that are no longer queued, but still in the
-     * worker's own batches.
-     */
-    unsigned int nTodo;
+    std::atomic<bool> done[16];
+    bool allAdded;
+    bool newBlock;
 
-    //! Whether we're shutting down.
-    bool fQuit;
-
-    //! The maximum number of elements to be processed in one batch
-    unsigned int nBatchSize;
-
+    std::vector<T*> checkPtrs;
     /** Internal function that does bulk of the verification work. */
-    bool Loop(bool fMaster = false)
+    bool Loop(unsigned int id, bool fMaster = false)
     {
-        boost::condition_variable& cond = fMaster ? condMaster : condWorker;
-        std::vector<T> vChecks;
-        vChecks.reserve(nBatchSize);
-        unsigned int nNow = 0;
+        bool cachedDone[16] = {false};
         bool fOk = true;
+        bool localAllAdded = false;
         do {
+
+            
+            T* pcheck[16];
+            unsigned int batchSize=1;
+            // logically, the do loop starts here
+            unsigned int qsize = 0;
             {
-                boost::unique_lock<boost::mutex> lock(mutex);
-                // first do the clean-up of the previous loop run (allowing us to do it in the same critsect)
-                if (nNow) {
-                    fAllOk &= fOk;
-                    nTodo -= nNow;
-                    if (nTodo == 0 && !fMaster)
-                        // We processed the last element; inform the master it can exit and return the result
-                        condMaster.notify_one();
-                } else {
-                    // first iteration
-                    nTotal++;
-                }
-                // logically, the do loop starts here
-                while (queue.empty()) {
-                    if ((fMaster || fQuit) && nTodo == 0) {
-                        nTotal--;
-                        bool fRet = fAllOk;
-                        // reset the status for new work later
-                        if (fMaster)
-                            fAllOk = true;
-                        // return the current status
-                        return fRet;
+                std::lock_guard<std::mutex> lg(mutex);
+                if (qsize = queue.size()) {
+                    //To do, add more than 1 if qsize is big?
+                    batchSize = std::max(1u,std::min(16u,qsize/2));
+                    for (auto i = 0;i < batchSize; i++) {
+                        pcheck[i] = queue.front();
+                        queue.pop();
                     }
-                    nIdle++;
-                    cond.wait(lock); // wait
-                    nIdle--;
+                    fOk = fAllOk.load();  // should this be here or outside of the lock or what?
                 }
-                // Decide how many work units to process now.
-                // * Do not try to do everything at once, but aim for increasingly smaller batches so
-                //   all workers finish approximately simultaneously.
-                // * Try to account for idle jobs which will instantly start helping.
-                // * Don't do batches smaller than 1 (duh), or larger than nBatchSize.
-                nNow = std::max(1U, std::min(nBatchSize, (unsigned int)queue.size() / (nTotal + nIdle + 1)));
-                vChecks.resize(nNow);
-                for (unsigned int i = 0; i < nNow; i++) {
-                    // We want the lock on the mutex to be as short as possible, so swap jobs from the global
-                    // queue to the local batch vector instead of copying.
-                    vChecks[i].swap(queue.back());
-                    queue.pop_back();
+                else {
+                    localAllAdded = allAdded; // this could also be outside of lock?
                 }
-                // Check whether we need to do work at all
-                fOk = fAllOk;
             }
-            // execute work
-            BOOST_FOREACH (T& check, vChecks)
+
+            if (qsize) {
                 if (fOk)
-                    fOk = check();
-            vChecks.clear();
+                {
+                    for (auto i =0; i < batchSize; i++)
+                        fOk = fOk && (*pcheck[i])();
+                }
+                if (!fOk)
+                    fAllOk.store(false); //atomic operation   (maybe this should not be atomic and take the lock here)
+
+            }
+            else {
+                if (fMaster) {
+                    if (!cachedDone[0])
+                        done[0].store(true);
+                    while (true) {
+                        bool allDone = true;
+                        for (unsigned int i = 0; i <16 ; i++) { //only works if scriptcheck threads = 16
+                            cachedDone[i] = cachedDone[i] || done[i].load();
+                            allDone = allDone && cachedDone[i];
+                        }
+                        if (allDone) {
+                            bool fRet = fAllOk.load(); //atomic operation
+                            // reset the status for new work later
+                            if (fMaster)
+                                fAllOk.store(true); //atomic operation
+                            for (unsigned int i = 0; i <16 ; i++) {
+                                done[i].store(false);
+                            }
+                            // return the current status
+                            return fRet;
+                        }
+                    }
+                }
+                else {
+                    if (localAllAdded) {
+                        done[id].store(true);
+                        localAllAdded = false;
+                        std::unique_lock<std::mutex> lock(mutex);
+                        condWorker.wait(lock); // wait for more work
+                    }
+                }
+            }
         } while (true);
     }
 
 public:
     //! Create a new check queue
-    CCheckQueue(unsigned int nBatchSizeIn) : nIdle(0), nTotal(0), fAllOk(true), nTodo(0), fQuit(false), nBatchSize(nBatchSizeIn) {}
+    CCheckQueue(unsigned int nBatchSizeIn) : fAllOk(true), allAdded(false), newBlock(true) {}
 
     //! Worker thread
-    void Thread()
+    void Thread(unsigned int id)
     {
-        Loop();
+        Loop(id);
     }
 
     //! Wait until execution finishes, and return whether all evaluations were successful.
     bool Wait()
     {
-        return Loop(true);
+        if (newBlock) { // Cover the case where no checks were added
+            std::unique_lock<std::mutex> lock(mutex);
+            allAdded = true;
+            condWorker.notify_all();
+        }
+        else {
+            std::lock_guard<std::mutex> lg(mutex);
+            if (checkPtrs.size()) {
+                BOOST_FOREACH (T* pcheck, checkPtrs) {
+                    queue.push(pcheck);
+                }
+            }
+            allAdded = true;
+        }
+        checkPtrs.clear();
+        bool result = Loop(0, true);
+        allChecks.clear();
+        newBlock = true;
+        { 
+            std::lock_guard<std::mutex> lg(mutex);
+            allAdded = false;
+        }
+        return result;
     }
 
     //! Add a batch of checks to the queue
     void Add(std::vector<T>& vChecks)
     {
-        boost::unique_lock<boost::mutex> lock(mutex);
-        BOOST_FOREACH (T& check, vChecks) {
-            queue.push_back(T());
-            check.swap(queue.back());
-        }
-        nTodo += vChecks.size();
-        if (vChecks.size() == 1)
-            condWorker.notify_one();
-        else if (vChecks.size() > 1)
+        if (newBlock) {// first time in new loop
+            std::unique_lock<std::mutex> lock(mutex);
             condWorker.notify_all();
+            newBlock = false;
+        }
+
+        BOOST_FOREACH (T& check, vChecks) {
+            allChecks.emplace_front(T());
+            allChecks.front().swap(check);
+            checkPtrs.push_back(&allChecks.front());
+        }
+        if (checkPtrs.size() > 100)
+        {
+            {
+            std::lock_guard<std::mutex> lg(mutex);
+            BOOST_FOREACH (T* pcheck, checkPtrs) {
+                queue.push(pcheck);
+            }
+            }
+            checkPtrs.clear();
+        }
+        
     }
 
     ~CCheckQueue()
     {
     }
 
-    bool IsIdle()
-    {
-        boost::unique_lock<boost::mutex> lock(mutex);
-        return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
-    }
+    //bool IsIdle()
+    //{
+    //    boost::unique_lock<boost::mutex> lock(mutex);
+    //    return (nTotal == nIdle && nTodo == 0 && fAllOk == true);
+    //}
 
 };
 
@@ -184,10 +221,10 @@ public:
     CCheckQueueControl(CCheckQueue<T>* pqueueIn) : pqueue(pqueueIn), fDone(false)
     {
         // passed queue is supposed to be unused, or NULL
-        if (pqueue != NULL) {
-            bool isIdle = pqueue->IsIdle();
-            assert(isIdle);
-        }
+        //if (pqueue != NULL) {
+        //    bool isIdle = pqueue->IsIdle();
+        //    assert(isIdle);
+        //}
     }
 
     bool Wait()
