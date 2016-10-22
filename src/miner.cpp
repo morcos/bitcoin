@@ -123,7 +123,7 @@ void BlockAssembler::resetBlock()
     blockFinished = false;
 }
 
-std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
+std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn, bool validate)
 {
     resetBlock();
 
@@ -164,12 +164,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     fIncludeWitness = IsWitnessEnabled(pindexPrev, chainparams.GetConsensus());
 
     addPriorityTxs();
-    addPackageTxs();
+    addPackageTxs(!validate);
 
     nLastBlockTx = nBlockTx;
     nLastBlockSize = nBlockSize;
     nLastBlockWeight = nBlockWeight;
-    LogPrintf("CreateNewBlock(): total size %u txs: %u fees: %ld sigops %d\n", nBlockSize, nBlockTx, nFees, nBlockSigOpsCost);
+    LogPrintf("CreateNewBlock(): total weight %u txs: %u fees: %ld sigops %d from mempool of %u txs %5.1f MB\n", nBlockWeight, nBlockTx, nFees, nBlockSigOpsCost, mempool.size(), (double)mempool.DynamicMemoryUsage() / 1000 / 1000);
 
     // Create coinbase transaction.
     CMutableTransaction coinbaseTx;
@@ -191,7 +191,7 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     pblocktemplate->vTxSigOpsCost[0] = WITNESS_SCALE_FACTOR * GetLegacySigOpCount(pblock->vtx[0]);
 
     CValidationState state;
-    if (!TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
+    if (validate && !TestBlockValidity(state, chainparams, *pblock, pindexPrev, false, false)) {
         throw std::runtime_error(strprintf("%s: TestBlockValidity failed: %s", __func__, FormatStateMessage(state)));
     }
 
@@ -396,7 +396,7 @@ void BlockAssembler::SortForBlock(const CTxMemPool::setEntries& package, CTxMemP
 // Each time through the loop, we compare the best transaction in
 // mapModifiedTxs with the next transaction in the mempool to decide what
 // transaction package to work on next.
-void BlockAssembler::addPackageTxs()
+void BlockAssembler::addPackageTxs(bool failFast)
 {
     // mapModifiedTx will store sorted packages after they are modified
     // because some of their txs are already in the block
@@ -463,7 +463,7 @@ void BlockAssembler::addPackageTxs()
             return;
         }
 
-        if (!TestPackage(packageSize, packageSigOpsCost)) {
+        if (!failFast && !TestPackage(packageSize, packageSigOpsCost)) {
             if (fUsingModified) {
                 // Since we always look at the best entry in mapModifiedTx,
                 // we must erase failed entries so that we can consider the
@@ -483,7 +483,7 @@ void BlockAssembler::addPackageTxs()
         ancestors.insert(iter);
 
         // Test if all tx's are Final
-        if (!TestPackageTransactions(ancestors)) {
+        if (!failFast && !TestPackageTransactions(ancestors)) {
             if (fUsingModified) {
                 mapModifiedTx.get<ancestor_score>().erase(modit);
                 failedTx.insert(iter);
@@ -500,6 +500,9 @@ void BlockAssembler::addPackageTxs()
             // Erase from the modified set, if present
             mapModifiedTx.erase(sortedEntries[i]);
         }
+
+        if (failFast && nBlockWeight >= (nBlockMaxWeight * std::min((size_t)10,(nCoinCacheUsage >> 28))))
+            return;
 
         // Update transactions that depend on each of these
         UpdatePackagesForAdded(ancestors, mapModifiedTx);
