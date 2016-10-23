@@ -498,7 +498,7 @@ BOOST_AUTO_TEST_CASE(test_big_witness_transaction) {
         control.Add(vChecks);
     }
 
-    bool controlCheck = control.Wait();
+    bool controlCheck = control.Wait(21);
     assert(controlCheck);
 
     threadGroup.interrupt_all();

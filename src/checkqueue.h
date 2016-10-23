@@ -18,6 +18,8 @@
 #include <mutex>
 #include <condition_variable>
 
+static unsigned int BATCH_SIZE = 16;
+
 template <typename T>
 class CCheckQueueControl;
 
@@ -50,21 +52,21 @@ private:
     //! The temporary evaluation result.
     std::atomic<bool> fAllOk;
 
-    std::atomic<bool> done[16];
+    std::atomic<bool> done[MAX_SCRIPTCHECK_THREADS];
     bool allAdded;
     bool newBlock;
-
+    
     std::vector<T*> checkPtrs;
     /** Internal function that does bulk of the verification work. */
-    bool Loop(unsigned int id, bool fMaster = false)
+    bool Loop(unsigned int id, bool fMaster = false, unsigned int numThreads = 0)
     {
-        bool cachedDone[16] = {false};
+        bool cachedDone[MAX_SCRIPTCHECK_THREADS] = {false};
         bool fOk = true;
         bool localAllAdded = false;
         do {
 
             
-            T* pcheck[16];
+            T* pcheck[BATCH_SIZE];
             unsigned int batchSize=1;
             // logically, the do loop starts here
             unsigned int qsize = 0;
@@ -72,7 +74,7 @@ private:
                 std::lock_guard<std::mutex> lg(mutex);
                 if (qsize = queue.size()) {
                     //To do, add more than 1 if qsize is big?
-                    batchSize = std::max(1u,std::min(16u,qsize/2));
+                    batchSize = std::max(1u,std::min(BATCH_SIZE,qsize/2));
                     for (auto i = 0;i < batchSize; i++) {
                         pcheck[i] = queue.front();
                         queue.pop();
@@ -100,7 +102,7 @@ private:
                         done[0].store(true);
                     while (true) {
                         bool allDone = true;
-                        for (unsigned int i = 0; i <16 ; i++) { //only works if scriptcheck threads = 16
+                        for (unsigned int i = 0; i < numThreads ; i++) { //only works if scriptcheck threads = 16
                             cachedDone[i] = cachedDone[i] || done[i].load();
                             allDone = allDone && cachedDone[i];
                         }
@@ -109,7 +111,7 @@ private:
                             // reset the status for new work later
                             if (fMaster)
                                 fAllOk.store(true); //atomic operation
-                            for (unsigned int i = 0; i <16 ; i++) {
+                            for (unsigned int i = 0; i < MAX_SCRIPTCHECK_THREADS; i++) {
                                 done[i].store(false);
                             }
                             // return the current status
@@ -140,7 +142,7 @@ public:
     }
 
     //! Wait until execution finishes, and return whether all evaluations were successful.
-    bool Wait()
+    bool Wait(unsigned int numThreads)
     {
         if (newBlock) { // Cover the case where no checks were added
             std::unique_lock<std::mutex> lock(mutex);
@@ -157,7 +159,7 @@ public:
             allAdded = true;
         }
         checkPtrs.clear();
-        bool result = Loop(0, true);
+        bool result = Loop(0, true, numThreads);
         allChecks.clear();
         newBlock = true;
         { 
@@ -227,11 +229,11 @@ public:
         //}
     }
 
-    bool Wait()
+    bool Wait(unsigned int numThreads)
     {
         if (pqueue == NULL)
             return true;
-        bool fRet = pqueue->Wait();
+        bool fRet = pqueue->Wait(numThreads);
         fDone = true;
         return fRet;
     }
@@ -245,7 +247,7 @@ public:
     ~CCheckQueueControl()
     {
         if (!fDone)
-            Wait();
+            Wait(0);
     }
 };
 
