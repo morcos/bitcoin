@@ -63,7 +63,7 @@ bool CCoinsViewDB::BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock, uns
         CCoinsMap::iterator itOld = it++;
         bool keep = itOld->second.flags & CCoinsCacheEntry::HOT;
         if (mode == CCoinsView::TRIM)
-            keep = keep || !(itOld->second.flags & CCoinsCacheEntry::BIG);
+            keep = keep || !(itOld->second.coins.IsPruned() || (itOld->second.flags & CCoinsCacheEntry::BIG));
         if (!(keep))
             mapCoins.erase(itOld);
         else {
