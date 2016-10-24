@@ -87,7 +87,7 @@ public:
     //! as new tx version will probably only be introduced at certain heights
     int nVersion;
  
-    static const size_t LARGE_COINS = 1000;
+    static const size_t LARGE_COINS = 5000;
 
     void FromTx(const CTransaction &tx, int nHeightIn) {
         fCoinBase = tx.IsCoinBase();
