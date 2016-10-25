@@ -161,10 +161,11 @@ private:
     int lastFewTxs;
     bool blockFinished;
 
+    CFeeRate lowestBlockFee;
 public:
     BlockAssembler(const CChainParams& chainparams);
     /** Construct a new block template with coinbase to scriptPubKeyIn */
-    std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn);
+    std::unique_ptr<CBlockTemplate> CreateNewBlock(const CScript& scriptPubKeyIn, bool validate=true);
 
 private:
     // utility functions
@@ -177,7 +178,7 @@ private:
     /** Add transactions based on tx "priority" */
     void addPriorityTxs();
     /** Add transactions based on feerate including unconfirmed ancestors */
-    void addPackageTxs();
+    void addPackageTxs(bool failFast);
 
     // helper function for addPriorityTxs
     /** Test if tx will still "fit" in the block */
