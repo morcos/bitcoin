@@ -2590,7 +2590,6 @@ static int64_t timeWriteIndex = 0;
 static int64_t timeTrimCoins = 0;
 static int64_t timeFlushCoins = 0;
 static int64_t timeFSTD = 0;
-
 /**
  * Update the on-disk chain state.
  * The caches and indexes are flushed depending on the mode we're called with
@@ -2645,7 +2644,11 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
     // Combine all conditions that result in a full cache flush.
     bool fDoFullFlush = (mode == FLUSH_STATE_ALWAYS) || fCacheLarge || fCacheCritical || fPeriodicFlush || fFlushForPrune;
     // Write blocks and block index to disk.
-    bool fTrimFlush = mode == FLUSH_STATE_PERIODIC && !fDoFullFlush && cacheSize * (10.0/8) > nCoinCacheUsage && nNow > nLastTrim + (int64_t)DATABASE_TRIM_INTERVAL * 1000000; 
+    bool fTrimNeeded = cacheSize * (10.0/8) > nCoinCacheUsage;
+    bool fTimeToTrim = (mode == FLUSH_STATE_IF_NEEDED && nLastFlush > nLastTrim) ||
+        (mode == FLUSH_STATE_PERIODIC && nNow > nLastTrim + (int64_t)DATABASE_TRIM_INTERVAL * 1000000);
+    bool fTrimFlush = fTrimNeeded && fTimeToTrim;  
+
     if (fDoFullFlush || fPeriodicWrite || fTrimFlush) {
         // Depend on nMinDiskSpace to ensure we can write block index
         if (!CheckDiskSpace(0))
@@ -2695,7 +2698,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         if (!CheckDiskSpace(128 * 2 * 2 * pcoinsTip->GetCacheSize()))
             return state.Error("out of disk space");
         // Flush the chainstate (which may refer to block index entries).
-        if (chainActive.Tip())
+        if (chainActive.Tip() && !fReindex && !fImporting && !IsInitialBlockDownload())
             WarmTipCache(Params());
         if (!pcoinsTip->HotFlush(fTrimFlush ? CCoinsView::TRIM : CCoinsView::NORMAL))
             return AbortNode(state, "Failed to write to coin database");
@@ -2706,7 +2709,7 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
         else
             nLastFlush = nNow;
         int64_t fcEnd = GetTimeMicros(); timeFlushCoins += fcEnd - fcStart;
-        LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs] Mode: %s\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001,fTrimFlush ? "TRIM" : "NORMAL");
+        LogPrint("bench", "FSTD    - Flush pcoinstip: %.2fms [%.2fs] Mode: %d Style: %s\n", (fcEnd - fcStart) * 0.001, timeFlushCoins * 0.000001,mode,fTrimFlush ? "TRIM" : "NORMAL");
 
     }
     if (fDoFullFlush || fTrimFlush || ((mode == FLUSH_STATE_ALWAYS || mode == FLUSH_STATE_PERIODIC) && nNow > nLastSetChain + (int64_t)DATABASE_WRITE_INTERVAL * 1000000)) {
