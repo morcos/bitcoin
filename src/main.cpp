@@ -2644,10 +2644,10 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
     // Combine all conditions that result in a full cache flush.
     bool fDoFullFlush = (mode == FLUSH_STATE_ALWAYS) || fCacheLarge || fCacheCritical || fPeriodicFlush || fFlushForPrune;
     // Write blocks and block index to disk.
-    bool fTrimNeeded = cacheSize * (10.0/8) > nCoinCacheUsage;
-    bool fTimeToTrim = (mode == FLUSH_STATE_IF_NEEDED && nLastFlush > nLastTrim) ||
-        (mode == FLUSH_STATE_PERIODIC && nNow > nLastTrim + (int64_t)DATABASE_TRIM_INTERVAL * 1000000);
-    bool fTrimFlush = fTrimNeeded && fTimeToTrim;  
+    bool fPeriodicTrim = fCacheLarge && nNow > nLastTrim + (int64_t)DATABASE_TRIM_INTERVAL * 1000000;
+    bool fNeededTrim = fCacheCritical && nLastFlush > nLastTrim;
+    // Don't try to trim too frequently.  Resort to full flush
+    bool fTrimFlush = fPeriodicTrim || fNeededTrim;  
 
     if (fDoFullFlush || fPeriodicWrite || fTrimFlush) {
         // Depend on nMinDiskSpace to ensure we can write block index
