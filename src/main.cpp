@@ -2702,9 +2702,26 @@ bool static FlushStateToDisk(CValidationState &state, FlushStateMode mode) {
             WarmTipCache(Params());
         if (!pcoinsTip->HotFlush(fTrimFlush ? CCoinsView::TRIM : CCoinsView::NORMAL))
             return AbortNode(state, "Failed to write to coin database");
+        size_t newSize = pcoinsTip->DynamicMemoryUsage();
         LogPrintf("Cache flushed, new cache= %.1f MiB(%utx)\n",
-                  pcoinsTip->DynamicMemoryUsage() * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
-        if (fTrimFlush)
+                  newSize * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+        if (fTrimFlush && newSize > nCoinCacheUsage) { //Flush normal if still critical
+            if (!pcoinsTip->HotFlush(CCoinsView::NORMAL))
+                return AbortNode(state, "Failed to write to coin database");
+            newSize = pcoinsTip->DynamicMemoryUsage();
+            LogPrintf("Cache flushed, new cache= %.1f MiB(%utx) - force NORMAL\n",
+                      newSize * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+            fDoFullFlush = true;
+            fTrimFlush = false;
+        }
+        if (newSize > nCoinCacheUsage) { //Do cold flush if still critical
+            if (!pcoinsTip->Flush())
+                return AbortNode(state, "Failed to write to coin database");
+            newSize = pcoinsTip->DynamicMemoryUsage();
+            LogPrintf("Cache flushed, new cache= %.1f MiB(%utx) - force Cold\n",
+                      newSize * (1.0 / (1<<20)), pcoinsTip->GetCacheSize());
+        }
+        if (fTrimFlush) 
             nLastTrim = nNow;
         else
             nLastFlush = nNow;
