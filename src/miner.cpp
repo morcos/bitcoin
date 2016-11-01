@@ -506,7 +506,7 @@ void BlockAssembler::addPackageTxs(bool failFast)
             mapModifiedTx.erase(sortedEntries[i]);
         }
 
-        if (failFast && nBlockWeight >= 3*nBlockMaxWeight/2) // + ((nBlockMaxWeight / 8) * std::min((size_t)64, (nCoinCacheUsage >> 20) - 250)))
+        if (failFast && nBlockWeight >= 3*nBlockMaxWeight)
             return;
 
         // Update transactions that depend on each of these
