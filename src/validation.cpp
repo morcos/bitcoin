@@ -788,6 +788,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         size_t nConflictingSize = 0;
         uint64_t nConflictingCount = 0;
         CTxMemPool::setEntries allConflicting;
+        bool fReplacementTransaction = false;
 
         // If we don't hold the lock allConflicting might be incomplete; the
         // subsequent RemoveStaged() and addUnchecked() calls don't guarantee
@@ -795,6 +796,7 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         LOCK(pool.cs);
         if (setConflicts.size())
         {
+            fReplacementTransaction = true;
             CFeeRate newFeeRate(nModifiedFees, nSize);
             set<uint256> setConflictsParents;
             const int maxDescendantsToVisit = 100;
@@ -955,9 +957,10 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
         pool.RemoveStaged(allConflicting, false);
 
         // This transaction should only count for fee estimation if
-        // the node is not behind and it is not dependent on any other
-        // transactions in the mempool
-        bool validForFeeEstimation = IsCurrentForFeeEstimation() && pool.HasNoInputsOf(tx);
+        // the node is not behind, it is not dependent on any other
+        // transactions in the mempool, and it isn't a BIP 125
+        // replacement transaction (may not be widely supported).
+        bool validForFeeEstimation = IsCurrentForFeeEstimation() && pool.HasNoInputsOf(tx) && !fReplacementTransaction;
 
         // Store transaction in memory
         pool.addUnchecked(hash, entry, setAncestors, validForFeeEstimation);
