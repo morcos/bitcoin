@@ -2797,10 +2797,8 @@ UniValue bumpfee(const JSONRPCRequest& request)
     if (totalFee > 0) {
         CAmount minTotalFee = nOldFeeRate.GetFee(maxNewTxSize) + ::incrementalRelayFee.GetFee(maxNewTxSize);
         if (totalFee < minTotalFee) {
-            CAmount recommendedTotalFee =  nOldFeeRate.GetFee(maxNewTxSize) + walletIncrementalRelayFee.GetFee(maxNewTxSize);
-            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Insufficient totalFee, must be at least %s (oldFee %s + incrementalFee %s), recommended %s (incrementalFee %s)",
-                                                                FormatMoney(minTotalFee), nOldFeeRate.GetFee(maxNewTxSize), ::incrementalRelayFee.GetFee(maxNewTxSize),
-                                                                FormatMoney(recommendedTotalFee), walletIncrementalRelayFee.GetFee(maxNewTxSize)));
+            throw JSONRPCError(RPC_INVALID_PARAMETER, strprintf("Insufficient totalFee, must be at least %s (oldFee %s + incrementalFee %s)",
+                                                                FormatMoney(minTotalFee), FormatMoney(nOldFeeRate.GetFee(maxNewTxSize)), FormatMoney(::incrementalRelayFee.GetFee(maxNewTxSize))));
         }
         nNewFee = totalFee;
         nNewFeeRate = CFeeRate(totalFee, maxNewTxSize);
