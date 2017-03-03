@@ -973,7 +973,7 @@ bool AppInitParameterInteraction()
     if (nConnectTimeout <= 0)
         nConnectTimeout = DEFAULT_CONNECT_TIMEOUT;
 
-    // Fee-per-kilobyte amount considered the same as "free"
+    // Fee-per-kilobyte amount required for mempool acceptance and relay
     // If you are mining, be careful setting this:
     // if you set it to zero then
     // a transaction spammer can cheaply fill blocks using
