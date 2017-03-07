@@ -653,31 +653,97 @@ CFeeRate CBlockPolicyEstimator::estimateRawFee(int confTarget, double successThr
     return CFeeRate(median);
 }
 
-CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, int *answerFoundAtTarget, const CTxMemPool& pool) const
+
+double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, double successThreshold, bool conservative) const
+{
+    double estimate = -1;
+    if (confTarget >= 1 && confTarget <= longStats->GetMaxConfirms()) {
+        if (confTarget <= shortStats->GetMaxConfirms()) {
+            estimate = shortStats->EstimateMedianVal(confTarget, SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
+        }
+        else {
+            if (!conservative) {
+                // When we aren't using conservative estimates, if a lower confTarget from a more recent horizon returns a lower answer use it.
+                estimate = shortStats->EstimateMedianVal(shortStats->GetMaxConfirms(), SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
+            }
+            if (confTarget <= feeStats->GetMaxConfirms()) {
+                double medEstimate = feeStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
+                if (estimate == -1 || medEstimate < estimate) {
+                    estimate = medEstimate;
+                }
+            }
+            else {
+                if (!conservative) {
+                    // When we aren't using conservative estimates, if a lower confTarget from a more recent horizon returns a lower answer use it.
+                    double medMax = feeStats->EstimateMedianVal(feeStats->GetMaxConfirms(), SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
+                    if (estimate == -1 ||  medMax < estimate) {
+                        estimate = medMax;
+                    }
+                }
+                double longEstimate = longStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
+                if (estimate == -1 || longEstimate < estimate) {
+                    estimate = longEstimate;
+                }
+            }
+        }
+    }
+    return estimate;
+}
+
+double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget) const
+{
+    double estimate = -1;
+    if (doubleTarget <= shortStats->GetMaxConfirms()) {
+        estimate = feeStats->EstimateMedianVal(doubleTarget, SUFFICIENT_FEETXS, DOUBLE_SUCCESS_PCT, true, nBestSeenHeight);
+    }
+    if (doubleTarget <= feeStats->GetMaxConfirms()) {
+        double longEstimate = longStats->EstimateMedianVal(doubleTarget, SUFFICIENT_FEETXS, DOUBLE_SUCCESS_PCT, true, nBestSeenHeight);
+        if (longEstimate > estimate) {
+            estimate = longEstimate;
+        }
+    }
+    return estimate;
+}
+
+CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, int *answerFoundAtTarget, const CTxMemPool& pool, bool conservative) const
 {
     if (answerFoundAtTarget)
         *answerFoundAtTarget = confTarget;
 
     double median = -1;
-
     {
         LOCK(cs_feeEstimator);
 
         // Return failure if trying to analyze a target we're not tracking
-        if (confTarget <= 0 || (unsigned int)confTarget > feeStats->GetMaxConfirms())
+        if (confTarget <= 0 || (unsigned int)confTarget > longStats->GetMaxConfirms())
             return CFeeRate(0);
 
         // It's not possible to get reasonable estimates for confTarget of 1
         if (confTarget == 1)
             confTarget = 2;
 
-        while (median < 0 && (unsigned int)confTarget <= feeStats->GetMaxConfirms()) {
-            median = feeStats->EstimateMedianVal(confTarget++, SUFFICIENT_FEETXS, DOUBLE_SUCCESS_PCT, true, nBestSeenHeight);
+        assert(confTarget > 0); //estimateCombinedFee and estimateConservativeFee take unsigned ints
+        double halfEst = estimateCombinedFee(confTarget/2, HALF_SUCCESS_PCT, false);
+        double actualEst = estimateCombinedFee(confTarget, SUCCESS_PCT, false);
+        double doubleEst = estimateCombinedFee(2 * confTarget, DOUBLE_SUCCESS_PCT, conservative);
+        median = halfEst;
+        if (actualEst > median) {
+            median = actualEst;
+        }
+        if (doubleEst > median) {
+            median = doubleEst;
+        }
+
+        if (conservative) {
+            double consEst =  estimateConservativeFee(2 * confTarget);
+            if (consEst > median) {
+                median = consEst;
+            }
         }
     } // Must unlock cs_feeEstimator before taking mempool locks
 
     if (answerFoundAtTarget)
-        *answerFoundAtTarget = confTarget - 1;
+        *answerFoundAtTarget = confTarget;
 
     // If mempool is limiting txs , return at least the min feerate from the mempool
     CAmount minPoolFee = pool.GetMinFee(GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE) * 1000000).GetFeePerK();
@@ -689,6 +755,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, int *answerFoun
 
     return CFeeRate(median);
 }
+
 
 bool CBlockPolicyEstimator::Write(CAutoFile& fileout) const
 {
