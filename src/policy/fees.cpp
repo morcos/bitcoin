@@ -688,6 +688,10 @@ unsigned int CBlockPolicyEstimator::MaxUsableEstimate() const
     return std::min(longStats->GetMaxConfirms(), std::max(BlockSpan(), HistoricalBlockSpan()) / 2);
 }
 
+/** Return a fee estimate at the required successThreshold from the shortest
+ * time horizon which tracks confirmations up to the desired target.  If
+ * conservative answer is not requested, also allow short time horizon estimates
+ * for a lower target to reduce the given answer */
 double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, double successThreshold, bool conservative) const
 {
     double estimate = -1;
@@ -724,6 +728,9 @@ double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, doubl
     return estimate;
 }
 
+/** Ensure that for a conservative estimate, the DOUBLE_SUCCESS_PCT is also met
+ * at 2 * target for any longer time horizons.
+ */
 double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget) const
 {
     double estimate = -1;
@@ -739,6 +746,13 @@ double CBlockPolicyEstimator::estimateConservativeFee(unsigned int doubleTarget)
     return estimate;
 }
 
+/** estimateSmartFee returns the max of the feerates calculated with a 60%
+ * threshold required at target / 2, an 85% threshold required at target and a
+ * 95% threshold required at 2 * target.  Each calculation is performed at the
+ * shortest time horizon which tracks the required target.  Conservative
+ * estimates, however, required the 95% threshold at 2 * target be met for any
+ * longer time horizons also.
+ */
 CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, int *answerFoundAtTarget, const CTxMemPool& pool, bool conservative) const
 {
     if (answerFoundAtTarget)
