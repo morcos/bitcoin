@@ -167,7 +167,7 @@ CFeeBumper::CFeeBumper(const CWallet *pWallet, const uint256 txidIn, int newConf
     } else {
         // if user specified a confirm target then don't consider any global payTxFee
         if (specifiedConfirmTarget) {
-            nNewFee = CWallet::GetMinimumFee(maxNewTxSize, newConfirmTarget, mempool, ::feeEstimator, true);
+            nNewFee = CWallet::GetMinimumFee(maxNewTxSize, newConfirmTarget, mempool, ::feeEstimator, nullptr, true);
         }
         // otherwise use the regular wallet logic to select payTxFee or default confirm target
         else {
