@@ -712,7 +712,7 @@ double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, doubl
             }
             if (confTarget <= feeStats->GetMaxConfirms()) {
                 double medEstimate = feeStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
-                if (estimate == -1 || medEstimate < estimate) {
+                if (medEstimate > 0 && (estimate == -1 || medEstimate < estimate)) {
                     estimate = medEstimate;
                 }
             }
@@ -720,12 +720,12 @@ double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, doubl
                 if (checkShorterHorizon) {
                     // If a lower confTarget from a more recent horizon returns a lower answer use it.
                     double medMax = feeStats->EstimateMedianVal(feeStats->GetMaxConfirms(), SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
-                    if (estimate == -1 ||  medMax < estimate) {
+                    if (medMax > 0 && (estimate == -1 ||  medMax < estimate)) {
                         estimate = medMax;
                     }
                 }
                 double longEstimate = longStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
-                if (estimate == -1 || longEstimate < estimate) {
+                if (longEstimate > 0 && (estimate == -1 || longEstimate < estimate)) {
                     estimate = longEstimate;
                 }
             }
@@ -807,7 +807,7 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, int *answerFoun
             median = doubleEst;
         }
 
-        if (conservative) {
+        if (conservative || median == -1) {
             double consEst =  estimateConservativeFee(2 * confTarget);
             if (consEst > median) {
                 median = consEst;
