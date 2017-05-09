@@ -40,7 +40,9 @@ private:
     // Track the historical moving average of theses totals over blocks
     std::vector<std::vector<double>> confAvg; // confAvg[Y][X]
 
-    std::vector<std::vector<double>> failAvg; // future use
+    // Track moving avg of txs which have been evicted from the mempool
+    // after failing to be confirmed within Y blocks
+    std::vector<std::vector<double>> failAvg; // failAvg[Y][X]
 
     // Sum the total feerate of all tx's in each bucket
     // Track the historical moving average of this total over blocks
