@@ -187,7 +187,7 @@ public:
     bool Read(CAutoFile& filein);
 
     /** Empty mempool transactions on shutdown to record failure to confirm for txs still in mempool */
-    void ClearInMempool(CTxMemPool& pool);
+    void FlushUnconfirmed(CTxMemPool& pool);
 
 private:
     unsigned int nBestSeenHeight;
