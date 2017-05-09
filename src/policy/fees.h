@@ -129,7 +129,7 @@ private:
 
     /** Require an avg of 0.1 tx in the combined feerate bucket per block to have stat significance */
     static constexpr double SUFFICIENT_FEETXS = 0.1;
-    /** Require an avg of 0.5 tx when using short decay since there are less blocks considered*/
+    /** Require an avg of 0.5 tx when using short decay since there are fewer blocks considered*/
     static constexpr double SUFFICIENT_TXS_SHORT = 0.5;
 
     /** Minimum and Maximum values for tracking feerates
