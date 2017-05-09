@@ -831,14 +831,17 @@ UniValue estimatesmartfee(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
         throw std::runtime_error(
-            "estimatesmartfee nblocks\n"
+            "estimatesmartfee nblocks (conservative)\n"
             "\nEstimates the approximate fee per kilobyte needed for a transaction to begin\n"
             "confirmation within nblocks blocks if possible and return the number of blocks\n"
             "for which the estimate is valid. Uses virtual transaction size as defined\n"
             "in BIP 141 (witness data is discounted).\n"
             "\nArguments:\n"
             "1. nblocks       (numeric)\n"
-            "2. conservative  (bool, optional, default=true) Whether to return a more conservative estimate calculated from a longer history\n"
+            "2. conservative  (bool, optional, default=true) Whether to return a more conservative estimate which\n"
+            "                 also satisfies a longer history. A conservative estimate potentially returns a higher\n"
+            "                 feerate and is more likely to be sufficient for the desired target, but is not as\n"
+            "                 responsive to short term drops in the prevailing fee market\n"
             "\nResult:\n"
             "{\n"
             "  \"feerate\" : x.x,     (numeric) estimate fee-per-kilobyte (in BTC)\n"
