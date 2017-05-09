@@ -53,6 +53,7 @@ private:
 
     double decay;
 
+    // Resolution (# of blocks) with which confirmations are tracked
     unsigned int scale;
 
     // Mempool counts of outstanding transactions
