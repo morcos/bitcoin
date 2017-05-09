@@ -696,9 +696,9 @@ unsigned int CBlockPolicyEstimator::MaxUsableEstimate() const
 
 /** Return a fee estimate at the required successThreshold from the shortest
  * time horizon which tracks confirmations up to the desired target.  If
- * conservative answer is not requested, also allow short time horizon estimates
+ * checkShorterHorizon is requested, also allow short time horizon estimates
  * for a lower target to reduce the given answer */
-double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, double successThreshold, bool conservative) const
+double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, double successThreshold, bool checkShorterHorizon) const
 {
     double estimate = -1;
     if (confTarget >= 1 && confTarget <= longStats->GetMaxConfirms()) {
@@ -706,8 +706,8 @@ double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, doubl
             estimate = shortStats->EstimateMedianVal(confTarget, SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
         }
         else {
-            if (!conservative) {
-                // When we aren't using conservative estimates, if a lower confTarget from a more recent horizon returns a lower answer use it.
+            if (checkShorterHorizon) {
+                // If a lower confTarget from a more recent horizon returns a lower answer use it.
                 estimate = shortStats->EstimateMedianVal(shortStats->GetMaxConfirms(), SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
             }
             if (confTarget <= feeStats->GetMaxConfirms()) {
@@ -717,8 +717,8 @@ double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, doubl
                 }
             }
             else {
-                if (!conservative) {
-                    // When we aren't using conservative estimates, if a lower confTarget from a more recent horizon returns a lower answer use it.
+                if (checkShorterHorizon) {
+                    // If a lower confTarget from a more recent horizon returns a lower answer use it.
                     double medMax = feeStats->EstimateMedianVal(feeStats->GetMaxConfirms(), SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
                     if (estimate == -1 ||  medMax < estimate) {
                         estimate = medMax;
@@ -785,9 +785,20 @@ CFeeRate CBlockPolicyEstimator::estimateSmartFee(int confTarget, int *answerFoun
         }
 
         assert(confTarget > 0); //estimateCombinedFee and estimateConservativeFee take unsigned ints
-        double halfEst = estimateCombinedFee(confTarget/2, HALF_SUCCESS_PCT, false);
-        double actualEst = estimateCombinedFee(confTarget, SUCCESS_PCT, false);
-        double doubleEst = estimateCombinedFee(2 * confTarget, DOUBLE_SUCCESS_PCT, conservative);
+
+        /** true is passed to estimateCombined fee for target/2 and target so
+         * that we check the max confirms for shorter time horizons as well.
+         * This is necessary to preserve monotonically increasing estimates.
+         * For non-conservative estimates we do the same thing for 2*target, but
+         * for conservative estimates we want to skip these shorter horizons
+         * checks for 2*target becuase we are taking the max over all time
+         * horizons so we already have monotonically increasing estimates and
+         * the purpose of conservative estimates is not to let short term
+         * fluctuations lower our estimates by too much.
+         */
+        double halfEst = estimateCombinedFee(confTarget/2, HALF_SUCCESS_PCT, true);
+        double actualEst = estimateCombinedFee(confTarget, SUCCESS_PCT, true);
+        double doubleEst = estimateCombinedFee(2 * confTarget, DOUBLE_SUCCESS_PCT, !conservative);
         median = halfEst;
         if (actualEst > median) {
             median = actualEst;

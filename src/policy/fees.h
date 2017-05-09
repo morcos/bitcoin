@@ -222,7 +222,7 @@ private:
     bool processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry);
 
     /** Helper for estimateSmartFee */
-    double estimateCombinedFee(unsigned int confTarget, double successThreshold, bool conservative) const;
+    double estimateCombinedFee(unsigned int confTarget, double successThreshold, bool checkShorterHorizon) const;
     /** Helper for estimateSmartFee */
     double estimateConservativeFee(unsigned int doubleTarget) const;
     /** Number of blocks of data recorded while fee estimates have been running */
