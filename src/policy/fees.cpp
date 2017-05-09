@@ -538,9 +538,12 @@ void CBlockPolicyEstimator::processTransaction(const CTxMemPoolEntry& entry, boo
     CFeeRate feeRate(entry.GetFee(), entry.GetTxSize());
 
     mapMemPoolTxs[hash].blockHeight = txHeight;
-    mapMemPoolTxs[hash].bucketIndex = feeStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
-    shortStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
-    longStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    unsigned int bucketIndex = feeStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    mapMemPoolTxs[hash].bucketIndex = bucketIndex;
+    unsigned int bucketIndex2 = shortStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    assert(bucketIndex == bucketIndex2);
+    unsigned int bucketIndex3 = longStats->NewTx(txHeight, (double)feeRate.GetFeePerK());
+    assert(bucketIndex == bucketIndex3);
 }
 
 bool CBlockPolicyEstimator::processBlockTx(unsigned int nBlockHeight, const CTxMemPoolEntry* entry)
