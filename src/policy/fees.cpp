@@ -317,8 +317,8 @@ double TxConfirmStats::EstimateMedianVal(int confTarget, double sufficientTxVal,
 
     // If we were passing until we reached last few buckets with insufficient data, then report those as failed
     if (passing && !newBucketRange) {
-        unsigned int failMinBucket = curNearBucket < curFarBucket ? curNearBucket : curFarBucket;
-        unsigned int failMaxBucket = curNearBucket > curFarBucket ? curNearBucket : curFarBucket;
+        unsigned int failMinBucket = std::min(curNearBucket, curFarBucket);
+        unsigned int failMaxBucket = std::max(curNearBucket, curFarBucket);
         failBucket.start = failMinBucket ? buckets[failMinBucket - 1] : 0;
         failBucket.end = buckets[failMaxBucket];
         failBucket.withinTarget = nConf;
