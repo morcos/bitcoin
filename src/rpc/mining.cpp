@@ -873,7 +873,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 1|| request.params.size() > 3)
         throw std::runtime_error(
-            "estimaterawfee nblocks\n"
+            "estimaterawfee nblocks (threshold horizon)\n"
             "\nWARNING: This interface is unstable and may disappear or change!\n"
             "\nWARNING: This is an advanced API call that is tightly coupled to the specific\n"
             "         implementation of fee estimation. The parameters it can be called with\n"
@@ -891,14 +891,14 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
             "\nResult:\n"
             "{\n"
             "  \"feerate\" : x.x,        (numeric) estimate fee-per-kilobyte (in BTC)\n"
-            "  \"decay\" : x.x,          (numeric) exponential decay for historical moving average of confirmation data\n"
+            "  \"decay\" : x.x,          (numeric) exponential decay (per block) for historical moving average of confirmation data\n"
             "  \"scale\" : x,            (numeric) The resolution of confirmation targets at this time horizon\n"
-            "  \"pass.\"                 information about the last range of feerates to succeed in meeting the threshold\n"
-            "  \"fail.\"                 information about the first range of feerates to fail to meet the threshold\n"
+            "  \"pass.\"                 information about the lowest range of feerates to succeed in meeting the threshold\n"
+            "  \"fail.\"                 information about the highest range of feerates to fail to meet the threshold\n"
             "  \"startrange\" : x.x,     (numeric) start of feerate range\n"
             "  \"endrange\" : x.x,       (numeric) end of feerate range\n"
             "  \"withintarget\" : x.x,   (numeric) number of txs over history horizon in the feerate range that were confirmed within target\n"
-            "  \"totalconfirmed\" : x.x, (numeric) number of txs over history horizon in the feerate range total\n"
+            "  \"totalconfirmed\" : x.x, (numeric) number of txs over history horizon in the feerate range that were confirmed at any point\n"
             "  \"inmempool\" : x.x,      (numeric) current number of txs in mempool in the feerate range unconfirmed for at least target blocks\n"
             "  \"leftmempool\" : x.x,    (numeric) number of txs over history horizon in the feerate range that left mempool unconfirmed after target\n"
             "}\n"
