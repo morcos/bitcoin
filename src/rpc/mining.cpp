@@ -903,7 +903,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
             "  \"leftmempool\" : x.x,    (numeric) number of txs over history horizon in the feerate range that left mempool unconfirmed after target\n"
             "}\n"
             "\n"
-            "A negative value is returned if no answer can be given.\n"
+            "A negative feerate is returned if no answer can be given.\n"
             "\nExample:\n"
             + HelpExampleCli("estimaterawfee", "6 0.9 1")
             );
