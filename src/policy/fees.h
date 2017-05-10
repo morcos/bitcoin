@@ -237,6 +237,10 @@ class FeeFilterRounder
 {
 private:
     static constexpr double MAX_FILTER_FEERATE = 1e7;
+    /** FEE_FILTER_SPACING is just used to provide some quantization of fee
+     * filter results.  Historically it reused FEE_SPACING, but it is completely
+     * unrelated, and was made a separate constant so the two concepts are not
+     * tied together */
     static constexpr double FEE_FILTER_SPACING = 1.1;
 
 public:
