@@ -702,32 +702,27 @@ double CBlockPolicyEstimator::estimateCombinedFee(unsigned int confTarget, doubl
 {
     double estimate = -1;
     if (confTarget >= 1 && confTarget <= longStats->GetMaxConfirms()) {
-        if (confTarget <= shortStats->GetMaxConfirms()) {
+        // Find estimate from shortest time horizon possible
+        if (confTarget <= shortStats->GetMaxConfirms()) { // short horizon
             estimate = shortStats->EstimateMedianVal(confTarget, SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
         }
-        else {
-            if (checkShorterHorizon) {
-                // If a lower confTarget from a more recent horizon returns a lower answer use it.
-                estimate = shortStats->EstimateMedianVal(shortStats->GetMaxConfirms(), SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
+        else if (confTarget <= feeStats->GetMaxConfirms()) { // medium horizon
+            estimate = feeStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
+        }
+        else { // long horizon
+            estimate = longStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
+        }
+        if (checkShorterHorizon) {
+            // If a lower confTarget from a more recent horizon returns a lower answer use it.
+            if (confTarget > feeStats->GetMaxConfirms()) {
+                double medMax = feeStats->EstimateMedianVal(feeStats->GetMaxConfirms(), SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
+                if (medMax > 0 && (estimate == -1 || medMax < estimate))
+                    estimate = medMax;
             }
-            if (confTarget <= feeStats->GetMaxConfirms()) {
-                double medEstimate = feeStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
-                if (medEstimate > 0 && (estimate == -1 || medEstimate < estimate)) {
-                    estimate = medEstimate;
-                }
-            }
-            else {
-                if (checkShorterHorizon) {
-                    // If a lower confTarget from a more recent horizon returns a lower answer use it.
-                    double medMax = feeStats->EstimateMedianVal(feeStats->GetMaxConfirms(), SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
-                    if (medMax > 0 && (estimate == -1 ||  medMax < estimate)) {
-                        estimate = medMax;
-                    }
-                }
-                double longEstimate = longStats->EstimateMedianVal(confTarget, SUFFICIENT_FEETXS, successThreshold, true, nBestSeenHeight);
-                if (longEstimate > 0 && (estimate == -1 || longEstimate < estimate)) {
-                    estimate = longEstimate;
-                }
+            if (confTarget > shortStats->GetMaxConfirms()) {
+                double shortMax = shortStats->EstimateMedianVal(shortStats->GetMaxConfirms(), SUFFICIENT_TXS_SHORT, successThreshold, true, nBestSeenHeight);
+                if (shortMax > 0 && (estimate == -1 || shortMax < estimate))
+                    estimate = shortMax;
             }
         }
     }
