@@ -880,7 +880,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
             "\nWARNING: This interface is unstable and may disappear or change!\n"
             "\nWARNING: This is an advanced API call that is tightly coupled to the specific\n"
             "         implementation of fee estimation. The parameters it can be called with\n"
-            "         and the results it returns will change if the internal implementaion changes.\n"
+            "         and the results it returns will change if the internal implementation changes.\n"
             "\nEstimates the approximate fee per kilobyte needed for a transaction to begin\n"
             "confirmation within nblocks blocks if possible. Uses virtual transaction size as defined\n"
             "in BIP 141 (witness data is discounted).\n"
@@ -922,8 +922,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
         int horizonInt = request.params[2].get_int();
         if (horizonInt < 0 || horizonInt > 2) {
             throw JSONRPCError(RPC_TYPE_ERROR, "Invalid horizon for fee estimates");
-        }
-        else {
+        } else {
             horizon = (FeeEstimateHorizon)horizonInt;
         }
     }
