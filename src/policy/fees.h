@@ -74,6 +74,8 @@ enum FeeEstimateHorizon {
     LONG_HALFLIFE = 2
 };
 
+std::string StringForFeeEstimateHorizon(FeeEstimateHorizon horizon);
+
 /* Used to return detailed information about a feerate bucket */
 struct EstimatorBucket
 {
