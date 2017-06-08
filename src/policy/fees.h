@@ -75,31 +75,20 @@ enum FeeEstimateHorizon {
 };
 
 /* Enumeration of reason for returned fee estimate */
-enum FeeReason {
-    NONE = 0,
-    HALF_ESTIMATE = 1,
-    FULL_ESTIMATE = 2,
-    DOUBLE_ESTIMATE = 3,
-    CONSERVATIVE = 4,
-    MEMPOOL_MIN = 5,
-    PAYTXFEE = 6,
-    FALLBACK = 7,
-    REQUIRED = 8,
-    MAXTXFEE = 9
+enum class FeeReason {
+    NONE,
+    HALF_ESTIMATE,
+    FULL_ESTIMATE,
+    DOUBLE_ESTIMATE,
+    CONSERVATIVE,
+    MEMPOOL_MIN,
+    PAYTXFEE,
+    FALLBACK,
+    REQUIRED,
+    MAXTXFEE,
 };
 
-static std::map<FeeReason, std::string> FeeReasonString = {
-    {FeeReason::NONE, "None"},
-    {FeeReason::HALF_ESTIMATE, "Half Target 60% Threshold"},
-    {FeeReason::FULL_ESTIMATE, "Target 85% Threshold"},
-    {FeeReason::DOUBLE_ESTIMATE, "Double Target 95% Threshold"},
-    {FeeReason::CONSERVATIVE, "Conservative Double Target longer horizon"},
-    {FeeReason::MEMPOOL_MIN, "Mempool Min Fee"},
-    {FeeReason::PAYTXFEE, "PayTxFee set"},
-    {FeeReason::FALLBACK, "Fallback fee"},
-    {FeeReason::REQUIRED, "Minimum Required Fee"},
-    {FeeReason::MAXTXFEE, "MaxTxFee limit"}
-};
+const std::string StringForFeeReason(FeeReason reason);
 
 /* Used to return detailed information about a feerate bucket */
 struct EstimatorBucket
