@@ -1210,6 +1210,6 @@ bool CWallet::DummySignTx(CMutableTransaction &txNew, const ContainerType &coins
     return true;
 }
 
-bool CalculateEstimateType(FeeEstimateMode mode);
+bool CalculateEstimateType(FeeEstimateMode mode, bool opt_in_rbf);
 
 #endif // BITCOIN_WALLET_WALLET_H
