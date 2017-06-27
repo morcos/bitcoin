@@ -78,6 +78,7 @@ class CTxMemPool;
 class CBlockPolicyEstimator;
 class CWalletTx;
 struct FeeCalculation;
+enum class FeeEstimateMode;
 
 /** (client) version numbers for particular wallet features */
 enum WalletFeature
@@ -1208,13 +1209,6 @@ bool CWallet::DummySignTx(CMutableTransaction &txNew, const ContainerType &coins
     }
     return true;
 }
-
-/* Used to determine type of fee estimation requested */
-enum class FeeEstimateMode {
-    UNSET,        //! Use default settings based on other criteria
-    ECONOMICAL,   //! Force estimateSmartFee to use non-conservative estimates
-    CONSERVATIVE, //! Force estimateSmartFee to use conservative estimates
- };
 
 bool CalculateEstimateType(FeeEstimateMode mode, bool opt_in_rbf);
 
