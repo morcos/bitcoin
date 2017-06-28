@@ -36,6 +36,19 @@ std::string StringForFeeReason(FeeReason reason) {
     return reason_string->second;
 }
 
+boost::optional<FeeEstimateMode> FeeModeForString(std::string mode_string) {
+    static const std::map<std::string, FeeEstimateMode> fee_modes = {
+        {"UNSET", FeeEstimateMode::UNSET},
+        {"ECONOMICAL", FeeEstimateMode::ECONOMICAL},
+        {"CONSERVATIVE", FeeEstimateMode::CONSERVATIVE},
+    };
+    auto mode = fee_modes.find(mode_string);
+
+    if (mode == fee_modes.end()) return boost::none;
+
+    return mode->second;
+}
+
 /**
  * We will instantiate an instance of this class to track transactions that were
  * included in a block. We will lump transactions into a bucket according to their

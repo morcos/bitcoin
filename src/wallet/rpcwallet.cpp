@@ -417,7 +417,10 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
             "                             The recipient will receive less bitcoins than you enter in the amount field.\n"
             "6. opt_in_rbf             (boolean, optional) Allow this transaction to be replaced by a transaction with higher fees\n"
             "7. conf_target            (numeric, optional) Confirmation target (in blocks)\n"
-            "8. conservative_estimate  (boolean, optional) Use conservative (potentially higher) fee estimation\n"
+            "8. \"estimate_mode\"      (string, optional, default=UNSET) The fee estimate mode, must be one of:\n"
+            "       \"UNSET\"\n"
+            "       \"ECONOMICAL\"\n"
+            "       \"CONSERVATIVE\"\n"
             "\nResult:\n"
             "\"txid\"                  (string) The transaction id.\n"
             "\nExamples:\n"
@@ -460,7 +463,12 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
     }
 
     if (request.params.size() > 7 && !request.params[7].isNull()) {
-        coin_control.m_fee_mode = request.params[7].get_bool() ? FeeEstimateMode::CONSERVATIVE : FeeEstimateMode::ECONOMICAL;
+        if (boost::optional<FeeEstimateMode> fee_mode = FeeModeForString(request.params[7].get_str())) {
+            coin_control.m_fee_mode = *fee_mode;
+        }
+        else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
+        }
     }
 
 
@@ -929,7 +937,10 @@ UniValue sendmany(const JSONRPCRequest& request)
             "    ]\n"
             "6. opt_in_rbf             (boolean, optional) Allow this transaction to be replaced by a transaction with higher fees\n"
             "7. conf_target            (numeric, optional) Confirmation target (in blocks)\n"
-            "8. conservative_estimate  (boolean, optional) Use conservative (potentially higher) fee estimation\n"
+            "8. \"estimate_mode\"      (string, optional, default=UNSET) The fee estimate mode, must be one of:\n"
+            "       \"UNSET\"\n"
+            "       \"ECONOMICAL\"\n"
+            "       \"CONSERVATIVE\"\n"
              "\nResult:\n"
             "\"txid\"                   (string) The transaction id for the send. Only 1 transaction is created regardless of \n"
             "                                    the number of addresses.\n"
@@ -975,7 +986,12 @@ UniValue sendmany(const JSONRPCRequest& request)
     }
 
     if (request.params.size() > 7 && !request.params[7].isNull()) {
-        coin_control.m_fee_mode = request.params[7].get_bool() ? FeeEstimateMode::CONSERVATIVE : FeeEstimateMode::ECONOMICAL;
+        if (boost::optional<FeeEstimateMode> fee_mode = FeeModeForString(request.params[7].get_str())) {
+            coin_control.m_fee_mode = *fee_mode;
+        }
+        else {
+            throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
+        }
     }
 
     std::set<CBitcoinAddress> setAddress;
@@ -2692,7 +2708,10 @@ UniValue fundrawtransaction(const JSONRPCRequest& request)
                             "                                  [vout_index,...]\n"
                             "     \"optIntoRbf\"             (boolean, optional) Allow this transaction to be replaced by a transaction with higher fees\n"
                             "     \"conf_target\"            (numeric, optional) Confirmation target (in blocks)\n"
-                            "     \"conservative_estimate\"  (boolean, optional) Use conservative (potentially higher) fee estimation\n"
+                            "     \"estimate_mode\"          (string, optional, default=UNSET) The fee estimate mode, must be one of:\n"
+                            "         \"UNSET\"\n"
+                            "         \"ECONOMICAL\"\n"
+                            "         \"CONSERVATIVE\"\n"
                             "   }\n"
                             "                         for backward compatibility: passing in a true instead of an object will result in {\"includeWatching\":true}\n"
                             "\nResult:\n"
@@ -2746,7 +2765,7 @@ UniValue fundrawtransaction(const JSONRPCRequest& request)
                 {"subtractFeeFromOutputs", UniValueType(UniValue::VARR)},
                 {"optIntoRbf", UniValueType(UniValue::VBOOL)},
                 {"conf_target", UniValueType(UniValue::VNUM)},
-                {"conservative_estimate", UniValueType(UniValue::VBOOL)},
+                {"estimate_mode", UniValueType(UniValue::VSTR)},
             },
             true, true);
 
@@ -2786,8 +2805,13 @@ UniValue fundrawtransaction(const JSONRPCRequest& request)
         if (options.exists("conf_target")) {
             coinControl.nConfirmTarget = options["conf_target"].get_int();
         }
-        if (options.exists("conservative_estimate")) {
-            coinControl.m_fee_mode = options["conservative_estimate"].get_bool() ? FeeEstimateMode::CONSERVATIVE : FeeEstimateMode::ECONOMICAL;
+        if (options.exists("estimate_mode")) {
+            if (boost::optional<FeeEstimateMode> fee_mode = FeeModeForString(options["estimate_mode"].get_str())) {
+                coinControl.m_fee_mode = *fee_mode;
+            }
+            else {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
+            }
         }
       }
     }
@@ -2866,7 +2890,10 @@ UniValue bumpfee(const JSONRPCRequest& request)
             "                         so the new transaction will not be explicitly bip-125 replaceable (though it may\n"
             "                         still be replaceable in practice, for example if it has unconfirmed ancestors which\n"
             "                         are replaceable).\n"
-            "     \"conservative_estimate\"  (boolean, optional) Use conservative (potentially higher) fee estimation\n"
+            "     \"estimate_mode\"     (string, optional, default=UNSET) The fee estimate mode, must be one of:\n"
+            "         \"UNSET\"\n"
+            "         \"ECONOMICAL\"\n"
+            "         \"CONSERVATIVE\"\n"
             "   }\n"
             "\nResult:\n"
             "{\n"
@@ -2897,7 +2924,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
                 {"confTarget", UniValueType(UniValue::VNUM)},
                 {"totalFee", UniValueType(UniValue::VNUM)},
                 {"replaceable", UniValueType(UniValue::VBOOL)},
-                {"conservative_estimate", UniValueType(UniValue::VBOOL)},
+                {"estimate_mode", UniValueType(UniValue::VSTR)},
             },
             true, true);
 
@@ -2922,8 +2949,13 @@ UniValue bumpfee(const JSONRPCRequest& request)
         if (options.exists("replaceable")) {
             replaceable = options["replaceable"].get_bool();
         }
-        if (options.exists("conservative_estimate")) {
-            fee_mode = options["conservative_estimate"].get_bool() ? FeeEstimateMode::CONSERVATIVE : FeeEstimateMode::ECONOMICAL;
+        if (options.exists("estimate_mode")) {
+            if (boost::optional<FeeEstimateMode> desired_fee_mode = FeeModeForString(options["estimate_mode"].get_str())) {
+                fee_mode = *desired_fee_mode;
+            }
+            else {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
+            }
         }
     }
 
@@ -3027,8 +3059,8 @@ static const CRPCCommand commands[] =
     { "wallet",             "lockunspent",              &lockunspent,              true,   {"unlock","transactions"} },
     { "wallet",             "move",                     &movecmd,                  false,  {"fromaccount","toaccount","amount","minconf","comment"} },
     { "wallet",             "sendfrom",                 &sendfrom,                 false,  {"fromaccount","toaddress","amount","minconf","comment","comment_to"} },
-    { "wallet",             "sendmany",                 &sendmany,                 false,  {"fromaccount","amounts","minconf","comment","subtractfeefrom","opt_in_rbf","conf_target","conservative_estimate"} },
-    { "wallet",             "sendtoaddress",            &sendtoaddress,            false,  {"address","amount","comment","comment_to","subtractfeefromamount","opt_in_rbf","conf_target","conservative_estimate"} },
+    { "wallet",             "sendmany",                 &sendmany,                 false,  {"fromaccount","amounts","minconf","comment","subtractfeefrom","opt_in_rbf","conf_target","estimate_mode"} },
+    { "wallet",             "sendtoaddress",            &sendtoaddress,            false,  {"address","amount","comment","comment_to","subtractfeefromamount","opt_in_rbf","conf_target","estimate_mode"} },
     { "wallet",             "setaccount",               &setaccount,               true,   {"address","account"} },
     { "wallet",             "settxfee",                 &settxfee,                 true,   {"amount"} },
     { "wallet",             "signmessage",              &signmessage,              true,   {"address","message"} },
