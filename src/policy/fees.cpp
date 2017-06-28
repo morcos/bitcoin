@@ -670,6 +670,24 @@ CFeeRate CBlockPolicyEstimator::estimateRawFee(int confTarget, double successThr
     return CFeeRate(median);
 }
 
+unsigned int CBlockPolicyEstimator::HighestTargetTracked(FeeEstimateHorizon horizon) const
+{
+    switch (horizon) {
+    case FeeEstimateHorizon::SHORT_HALFLIFE: {
+        return shortStats->GetMaxConfirms();
+    }
+    case FeeEstimateHorizon::MED_HALFLIFE: {
+        return feeStats->GetMaxConfirms();
+    }
+    case FeeEstimateHorizon::LONG_HALFLIFE: {
+        return longStats->GetMaxConfirms();
+    }
+    default: {
+        return 0;
+    }
+    }
+}
+
 unsigned int CBlockPolicyEstimator::BlockSpan() const
 {
     if (firstRecordedHeight == 0) return 0;
