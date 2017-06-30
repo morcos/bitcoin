@@ -2743,26 +2743,30 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                 }
 
                 if (nFeeRet >= nFeeNeeded) {
-                    // Reduce fee to only the needed amount if we have change
-                    // output to increase.  This prevents potential overpayment
-                    // in fees if the coins selected to meet nFeeNeeded result
-                    // in a transaction that requires less fee than the prior
-                    // iteration.
+                    // Reduce fee to only the needed amount if possible. This
+                    // prevents potential overpayment in fees if the coins
+                    // selected to meet nFeeNeeded result in a transaction that
+                    // requires less fee than the prior iteration.
+
                     // TODO: The case where nSubtractFeeFromAmount > 0 remains
                     // to be addressed because it requires returning the fee to
                     // the payees and not the change output.
-                    CAmount max_excess_fee = GetMinimumFee(change_prototype_size, currentConfirmationTarget, ::mempool, ::feeEstimator, nullptr) +
-                        GetDustThreshold(change_prototype_txout, ::dustRelayFee);
+
                     // If we have no change and a big enough excess fee, then
                     // try to construct transaction again only without picking
                     // new inputs. We now know we only need the smaller fee
                     // (because of reduced tx size) and so we should add a
                     // change input. Only try this once.
+                    CAmount fee_needed_for_change = GetMinimumFee(change_prototype_size, currentConfirmationTarget, ::mempool, ::feeEstimator, nullptr);
+                    CAmount minimum_value_for_change = GetDustThreshold(change_prototype_txout, ::dustRelayFee);
+                    CAmount max_excess_fee = fee_needed_for_change + minimum_value_for_change;
                     if (nFeeRet > nFeeNeeded + max_excess_fee && nChangePosInOut == -1 && nSubtractFeeFromAmount == 0 && pick_new_inputs) {
                         pick_new_inputs = false;
-                        nFeeRet = nFeeNeeded;
+                        nFeeRet = nFeeNeeded + fee_needed_for_change;
                         continue;
                     }
+
+                    // If we have change output already, just increase it
                     if (nFeeRet > nFeeNeeded && nChangePosInOut != -1 && nSubtractFeeFromAmount == 0) {
                         CAmount extraFeePaid = nFeeRet - nFeeNeeded;
                         std::vector<CTxOut>::iterator change_position = txNew.vout.begin()+nChangePosInOut;
@@ -2772,7 +2776,8 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                     break; // Done, enough fee included.
                 }
                 else if (!pick_new_inputs) {
-                    // This shouldn't happen
+                    // This shouldn't happen, we should have had enough excess
+                    // fee to pay for the new output and still meet nFeeNeeded
                     strFailReason = _("Transaction fee and change calculation failed");
                     return false;
                 }
