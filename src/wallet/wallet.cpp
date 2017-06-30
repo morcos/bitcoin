@@ -2600,8 +2600,12 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
 
                 scriptChange = GetScriptForDestination(vchPubKey.GetID());
             }
+            CTxOut change_prototype_txout(0, scriptChange);
+            size_t change_prototype_size = GetSerializeSize(change_prototype_txout, SER_DISK, 0);
 
             nFeeRet = 0;
+            bool pick_new_inputs = true;
+            CAmount nValueIn = 0;
             // Start with no fee and loop until there is enough fee
             while (true)
             {
@@ -2647,15 +2651,18 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                 }
 
                 // Choose coins to use
-                CAmount nValueIn = 0;
-                setCoins.clear();
-                if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl))
-                {
-                    strFailReason = _("Insufficient funds");
-                    return false;
+                if (pick_new_inputs) {
+                    nValueIn = 0;
+                    setCoins.clear();
+                    if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coinControl))
+                    {
+                        strFailReason = _("Insufficient funds");
+                        return false;
+                    }
                 }
 
                 const CAmount nChange = nValueIn - nValueToSelect;
+
                 if (nChange > 0)
                 {
                     // Fill a vout to ourself
@@ -2744,8 +2751,18 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                     // TODO: The case where nSubtractFeeFromAmount > 0 remains
                     // to be addressed because it requires returning the fee to
                     // the payees and not the change output.
-                    // TODO: The case where there is no change output remains
-                    // to be addressed so we avoid creating too small an output.
+                    CAmount max_excess_fee = GetMinimumFee(change_prototype_size, currentConfirmationTarget, ::mempool, ::feeEstimator, nullptr) +
+                        GetDustThreshold(change_prototype_txout, ::dustRelayFee);
+                    // If we have no change and a big enough excess fee, then
+                    // try to construct transaction again only without picking
+                    // new inputs. We now know we only need the smaller fee
+                    // (because of reduced tx size) and so we should add a
+                    // change input. Only try this once.
+                    if (nFeeRet > nFeeNeeded + max_excess_fee && nChangePosInOut == -1 && nSubtractFeeFromAmount == 0 && pick_new_inputs) {
+                        pick_new_inputs = false;
+                        nFeeRet = nFeeNeeded;
+                        continue;
+                    }
                     if (nFeeRet > nFeeNeeded && nChangePosInOut != -1 && nSubtractFeeFromAmount == 0) {
                         CAmount extraFeePaid = nFeeRet - nFeeNeeded;
                         std::vector<CTxOut>::iterator change_position = txNew.vout.begin()+nChangePosInOut;
@@ -2753,6 +2770,11 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
                         nFeeRet -= extraFeePaid;
                     }
                     break; // Done, enough fee included.
+                }
+                else if (!pick_new_inputs) {
+                    // This shouldn't happen
+                    strFailReason = _("Transaction fee and change calculation failed");
+                    return false;
                 }
 
                 // Try to reduce change to include necessary fee
@@ -2773,7 +2795,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient>& vecSend, CWalletT
             }
         }
 
-        if (nChangePosInOut == -1) reserveKey.ReturnKey(); // Return any reserved key if we don't have change
+        if (nChangePosInOut == -1) reservekey.ReturnKey(); // Return any reserved key if we don't have change
 
         if (sign)
         {
