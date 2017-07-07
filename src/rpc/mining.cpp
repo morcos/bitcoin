@@ -878,7 +878,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
 {
     if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
         throw std::runtime_error(
-            "estimaterawfee nblocks (threshold horizon)\n"
+            "estimaterawfee nblocks (threshold)\n"
             "\nWARNING: This interface is unstable and may disappear or change!\n"
             "\nWARNING: This is an advanced API call that is tightly coupled to the specific\n"
             "         implementation of fee estimation. The parameters it can be called with\n"
@@ -904,11 +904,11 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
             "          \"totalconfirmed\" : x.x, (numeric) number of txs over history horizon in the feerate range that were confirmed at any point\n"
             "          \"inmempool\" : x.x,      (numeric) current number of txs in mempool in the feerate range unconfirmed for at least target blocks\n"
             "          \"leftmempool\" : x.x,    (numeric) number of txs over history horizon in the feerate range that left mempool unconfirmed after target\n"
-            "      }\n"
-            "      \"fail\" : { ... }        (json object, optional) information about the highest range of feerates to fail to meet the threshold\n"
+            "      },\n"
+            "      \"fail\" : { ... },       (json object, optional) information about the highest range of feerates to fail to meet the threshold\n"
             "      \"errors\":  [ str... ]   (json array of strings, optional) Errors encountered during processing\n"
-            "  }\n"
-            "  \"medium\" : { ... }     (json object, optional) estimate for medium time horizon\n"
+            "  },\n"
+            "  \"medium\" : { ... },    (json object, optional) estimate for medium time horizon\n"
             "  \"long\" : { ... }       (json object) estimate for long time horizon\n"
             "}\n"
             "\n"
@@ -933,7 +933,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
 
     UniValue result(UniValue::VOBJ);
 
-    const char* horizonNames[] = {"short", "medium", "long"};
+    const char* horizon_names[] = {"short", "medium", "long"};
 
     for (FeeEstimateHorizon horizon : {FeeEstimateHorizon::SHORT_HALFLIFE, FeeEstimateHorizon::MED_HALFLIFE, FeeEstimateHorizon::LONG_HALFLIFE}) {
         CFeeRate feeRate;
@@ -943,7 +943,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
         if ((unsigned int)nBlocks > ::feeEstimator.HighestTargetTracked(horizon)) continue;
 
         feeRate = ::feeEstimator.estimateRawFee(nBlocks, threshold, horizon, &buckets);
-        UniValue horizonresult(UniValue::VOBJ);
+        UniValue horizon_result(UniValue::VOBJ);
         UniValue errors(UniValue::VARR);
         UniValue passbucket(UniValue::VOBJ);
         passbucket.push_back(Pair("startrange", round(buckets.pass.start)));
@@ -961,22 +961,22 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
         failbucket.push_back(Pair("leftmempool", round(buckets.fail.leftMempool * 100.0) / 100.0));
 
         // CFeeRate(0) is used to indicate error as a return value from estimateRawFee
-        if (!(feeRate == CFeeRate(0))) {
-            horizonresult.push_back(Pair("feerate", ValueFromAmount(feeRate.GetFeePerK())));
-            horizonresult.push_back(Pair("decay", buckets.decay));
-            horizonresult.push_back(Pair("scale", (int)buckets.scale));
-            horizonresult.push_back(Pair("pass", passbucket));
+        if (feeRate != CFeeRate(0)) {
+            horizon_result.push_back(Pair("feerate", ValueFromAmount(feeRate.GetFeePerK())));
+            horizon_result.push_back(Pair("decay", buckets.decay));
+            horizon_result.push_back(Pair("scale", (int)buckets.scale));
+            horizon_result.push_back(Pair("pass", passbucket));
             // buckets.fail.start == -1 indicates that all buckets passed, there is no fail bucket to output
-            if (buckets.fail.start != -1) horizonresult.push_back(Pair("fail", failbucket));
+            if (buckets.fail.start != -1) horizon_result.push_back(Pair("fail", failbucket));
         } else {
             // Output only information that is still meaningful in the event of error
-            horizonresult.push_back(Pair("decay", buckets.decay));
-            horizonresult.push_back(Pair("scale", (int)buckets.scale));
-            horizonresult.push_back(Pair("fail", failbucket));
+            horizon_result.push_back(Pair("decay", buckets.decay));
+            horizon_result.push_back(Pair("scale", (int)buckets.scale));
+            horizon_result.push_back(Pair("fail", failbucket));
             errors.push_back("Insufficient data or no feerate found which meets threshold");
-            horizonresult.push_back(Pair("errors",errors));
+            horizon_result.push_back(Pair("errors",errors));
         }
-        result.push_back(Pair(horizonNames[horizon], horizonresult));
+        result.push_back(Pair(horizon_names[horizon], horizon_result));
     }
     return result;
 }
