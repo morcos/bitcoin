@@ -876,7 +876,7 @@ UniValue estimatesmartfee(const JSONRPCRequest& request)
 
 UniValue estimaterawfee(const JSONRPCRequest& request)
 {
-    if (request.fHelp || request.params.size() < 1|| request.params.size() > 2)
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2)
         throw std::runtime_error(
             "estimaterawfee nblocks (threshold horizon)\n"
             "\nWARNING: This interface is unstable and may disappear or change!\n"
