@@ -933,8 +933,6 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
 
     UniValue result(UniValue::VOBJ);
 
-    const char* horizon_names[] = {"short", "medium", "long"};
-
     for (FeeEstimateHorizon horizon : {FeeEstimateHorizon::SHORT_HALFLIFE, FeeEstimateHorizon::MED_HALFLIFE, FeeEstimateHorizon::LONG_HALFLIFE}) {
         CFeeRate feeRate;
         EstimationResult buckets;
@@ -976,7 +974,7 @@ UniValue estimaterawfee(const JSONRPCRequest& request)
             errors.push_back("Insufficient data or no feerate found which meets threshold");
             horizon_result.push_back(Pair("errors",errors));
         }
-        result.push_back(Pair(horizon_names[horizon], horizon_result));
+        result.push_back(Pair(StringForFeeEstimateHorizon(horizon), horizon_result));
     }
     return result;
 }
