@@ -464,9 +464,7 @@ UniValue sendtoaddress(const JSONRPCRequest& request)
     }
 
     if (request.params.size() > 7 && !request.params[7].isNull()) {
-        if (boost::optional<FeeEstimateMode> fee_mode = FeeModeForString(request.params[7].get_str())) {
-            coin_control.m_fee_mode = *fee_mode;
-        } else {
+        if (!FeeModeFromString(request.params[7].get_str(), coin_control.m_fee_mode)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
         }
     }
@@ -986,9 +984,7 @@ UniValue sendmany(const JSONRPCRequest& request)
     }
 
     if (request.params.size() > 7 && !request.params[7].isNull()) {
-        if (boost::optional<FeeEstimateMode> fee_mode = FeeModeForString(request.params[7].get_str())) {
-            coin_control.m_fee_mode = *fee_mode;
-        } else {
+        if (!FeeModeFromString(request.params[7].get_str(), coin_control.m_fee_mode)) {
             throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
         }
     }
@@ -2805,9 +2801,7 @@ UniValue fundrawtransaction(const JSONRPCRequest& request)
             coinControl.nConfirmTarget = options["conf_target"].get_int();
         }
         if (options.exists("estimate_mode")) {
-            if (boost::optional<FeeEstimateMode> fee_mode = FeeModeForString(options["estimate_mode"].get_str())) {
-                coinControl.m_fee_mode = *fee_mode;
-            } else {
+            if (!FeeModeFromString(options["estimate_mode"].get_str(), coinControl.m_fee_mode)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
             }
         }
@@ -2948,9 +2942,7 @@ UniValue bumpfee(const JSONRPCRequest& request)
             replaceable = options["replaceable"].get_bool();
         }
         if (options.exists("estimate_mode")) {
-            if (boost::optional<FeeEstimateMode> desired_fee_mode = FeeModeForString(options["estimate_mode"].get_str())) {
-                fee_mode = *desired_fee_mode;
-            } else {
+            if (!FeeModeFromString(options["estimate_mode"].get_str(), fee_mode)) {
                 throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid estimate_mode parameter");
             }
         }

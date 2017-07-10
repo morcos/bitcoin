@@ -11,8 +11,6 @@
 #include "random.h"
 #include "sync.h"
 
-#include <boost/optional.hpp>
-
 #include <map>
 #include <string>
 #include <vector>
@@ -99,7 +97,7 @@ enum class FeeEstimateMode {
     CONSERVATIVE, //! Force estimateSmartFee to use conservative estimates
 };
 
-boost::optional<FeeEstimateMode> FeeModeForString(std::string mode_string);
+bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_estimate_mode);
 
 /* Used to return detailed information about a feerate bucket */
 struct EstimatorBucket

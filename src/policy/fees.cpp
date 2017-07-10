@@ -36,7 +36,7 @@ std::string StringForFeeReason(FeeReason reason) {
     return reason_string->second;
 }
 
-boost::optional<FeeEstimateMode> FeeModeForString(std::string mode_string) {
+bool FeeModeFromString(const std::string& mode_string, FeeEstimateMode& fee_estimate_mode) {
     static const std::map<std::string, FeeEstimateMode> fee_modes = {
         {"UNSET", FeeEstimateMode::UNSET},
         {"ECONOMICAL", FeeEstimateMode::ECONOMICAL},
@@ -44,9 +44,10 @@ boost::optional<FeeEstimateMode> FeeModeForString(std::string mode_string) {
     };
     auto mode = fee_modes.find(mode_string);
 
-    if (mode == fee_modes.end()) return boost::none;
+    if (mode == fee_modes.end()) return false;
 
-    return mode->second;
+    fee_estimate_mode = mode->second;
+    return true;
 }
 
 /**
