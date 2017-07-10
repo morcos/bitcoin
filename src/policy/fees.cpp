@@ -651,7 +651,7 @@ CFeeRate CBlockPolicyEstimator::estimateRawFee(int confTarget, double successThr
         break;
     }
     default: {
-        return CFeeRate(0);
+        throw std::out_of_range("CBlockPoicyEstimator::estimateRawFee unknown FeeEstimateHorizon");
     }
     }
 
@@ -683,7 +683,7 @@ unsigned int CBlockPolicyEstimator::HighestTargetTracked(FeeEstimateHorizon hori
         return longStats->GetMaxConfirms();
     }
     default: {
-        return 0;
+        throw std::out_of_range("CBlockPoicyEstimator::HighestTargetTracked unknown FeeEstimateHorizon");
     }
     }
 }
