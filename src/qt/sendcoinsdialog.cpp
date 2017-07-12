@@ -645,6 +645,7 @@ void SendCoinsDialog::updateSmartFeeLabel()
     CFeeRate feeRate = CFeeRate(CWallet::GetMinimumFee(1000, coin_control, ::mempool, ::feeEstimator, &feeCalc));
 
     // show the estimated required time for confirmation
+    assert(coin_control.m_confirm_target); // This should always be set in the GUI via updateCoinControlState
     ui->confirmationTargetLabel->setText(GUIUtil::formatDurationStr(*coin_control.m_confirm_target * Params().GetConsensus().nPowTargetSpacing) + " / " + tr("%n block(s)", "", *coin_control.m_confirm_target));
 
     ui->labelSmartFee->setText(BitcoinUnits::formatWithUnit(model->getOptionsModel()->getDisplayUnit(), feeRate.GetFeePerK()) + "/kB");
