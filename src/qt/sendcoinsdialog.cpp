@@ -626,7 +626,7 @@ void SendCoinsDialog::updateCoinControlState(CCoinControl& ctrl)
     if (ui->radioCustomFee->isChecked()) {
         ctrl.m_feerate = CFeeRate(ui->customFee->value());
     } else {
-        ctrl.m_feerate = boost::none;
+        ctrl.m_feerate.reset();
     }
     // Avoid using global defaults when sending money from the GUI
     // Either custom fee will be used or if not selected, the last smart fee slider value.
@@ -640,7 +640,7 @@ void SendCoinsDialog::updateSmartFeeLabel()
         return;
     CCoinControl coin_control;
     updateCoinControlState(coin_control);
-    coin_control.m_feerate = boost::none; // Explicitly use only fee estimation rate for smart fee labels
+    coin_control.m_feerate.reset(); // Explicitly use only fee estimation rate for smart fee labels
     FeeCalculation feeCalc;
     CFeeRate feeRate = CFeeRate(CWallet::GetMinimumFee(1000, coin_control, ::mempool, ::feeEstimator, &feeCalc));
 
