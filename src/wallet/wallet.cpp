@@ -2939,8 +2939,8 @@ CAmount CWallet::GetMinimumFee(unsigned int nTxBytes, const CCoinControl& coin_c
         if (coin_control.fOverrideFeeRate) return fee_needed;
     }
     else if (!coin_control.m_confirm_target && ::payTxFee != CFeeRate(0)) { // 3. TODO: remove magic value of 0 for global payTxFee
-            fee_needed = ::payTxFee.GetFee(nTxBytes);
-            if (feeCalc) feeCalc->reason = FeeReason::PAYTXFEE;
+        fee_needed = ::payTxFee.GetFee(nTxBytes);
+        if (feeCalc) feeCalc->reason = FeeReason::PAYTXFEE;
     }
     else { // 2. or 4.
         // We will use smart fee estimation
