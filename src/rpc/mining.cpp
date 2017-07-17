@@ -829,6 +829,8 @@ UniValue estimatesmartfee(const JSONRPCRequest& request)
             "  \"blocks\" : n         (numeric) block number where estimate was found\n"
             "}\n"
             "\n"
+            "The request target will be clamped between 2 and the highest target\n"
+            "fee estimation is able to return based on how long it has been running.\n"
             "An error is returned if not enough transactions and blocks\n"
             "have been observed to make an estimate for any number of blocks.\n"
             "\nExample:\n"
