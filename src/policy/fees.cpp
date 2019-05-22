@@ -606,6 +606,12 @@ void CBlockPolicyEstimator::processBlock(unsigned int nBlockHeight,
     shortStats->UpdateMovingAverages();
     longStats->UpdateMovingAverages();
 
+    // Shortcut to speed up IBD: if no txs have been tracked entering the
+    // mempool yet, don't need to process individual txs in the block
+    if (mapMemPoolTxs.empty()) {
+        return;
+    }
+
     unsigned int countedTxs = 0;
     // Update averages with data points from current block
     for (const auto& entry : entries) {
